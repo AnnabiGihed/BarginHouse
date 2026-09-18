@@ -43,12 +43,28 @@ function D:Create(parent)
     if D.watchFrame:IsShown() then D.watchFrame:Hide() else D.watchFrame:Show(); D:RefreshWatch() end
   end)
 
-  local status = ns.Text(f, "BHFontSmall", "")
-  status:SetPoint("TOPLEFT", mode, "TOPRIGHT", 12, -2)
-  ns.Size(status, 360, 14)
+  local statusBox = CreateFrame("Button", nil, f)
+  statusBox:SetPoint("TOPLEFT", mode, "TOPRIGHT", 12, 0)
+  statusBox:SetPoint("BOTTOMRIGHT", watchBtn, "BOTTOMLEFT", -10, 0)
+  statusBox:SetScript("OnEnter", function(self2)
+    if not D.statusTip then return end
+    GameTooltip:SetOwner(self2, "ANCHOR_BOTTOM")
+    GameTooltip:SetText(D.statusTip[1] or "", 1, 1, 1)
+    for i = 2, #D.statusTip do GameTooltip:AddLine(D.statusTip[i], 0.8, 0.8, 0.8, true) end
+    GameTooltip:Show()
+  end)
+  statusBox:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+  self.statusBox = statusBox
+
+  local status = ns.Text(statusBox, "BHFontSmall", "")
+  status:SetPoint("TOPLEFT", 0, -2)
+  status:SetPoint("RIGHT", 0, 0)
+  status:SetHeight(14)
   self.status = status
-  local prog = ns.Progress(f, 360, 4)
-  prog:SetPoint("BOTTOMLEFT", mode, "BOTTOMRIGHT", 12, 3)
+  local prog = ns.Progress(statusBox, 10, 4)
+  prog:SetPoint("BOTTOMLEFT", 0, 3)
+  prog:SetPoint("BOTTOMRIGHT", 0, 3)
   self.prog = prog
 
   -- Row 2: filters ----------------------------------------------------------
@@ -234,18 +250,29 @@ function D:UpdateStatus()
   if ns.FullScan.active then return end
   local remote = ns.FullScan:RemoteInfo()
   local last = ns.FullScan:Info()
+  local tip = {}
   if remote then
-    self.status:SetText(format("Using the scan shared by |cff66dd88%s|r %s: %d deal candidates", remote.from or "?", ns.TimeAgo(time() - remote.t), remote.auctions or 0))
+    self.status:SetText(format("Shared scan from |cff66dd88%s|r, %s", remote.from or "?", ns.TimeAgo(time() - remote.t)))
+    tip[1] = "Scan shared by " .. (remote.from or "?")
+    tip[2] = format("%s, %d deal candidates", ns.TimeAgo(time() - remote.t), remote.auctions or 0)
   elseif last then
-    local have = ns.FullScan.groups and "" or "  |cffffaa33(scan again this session to find deals)|r"
-    self.status:SetText(format("Last full scan %s: %d auctions, %d items%s", ns.TimeAgo(time() - last.t), last.auctions, last.items, have))
+    self.status:SetText(format("Scanned %s: %s items", ns.TimeAgo(time() - last.t), ns.Commas(last.items or 0)))
+    tip[1] = "Last full scan"
+    tip[2] = format("%s: %s auctions, %s items (%s)", ns.TimeAgo(time() - last.t),
+      ns.Commas(last.auctions or 0), ns.Commas(last.items or 0), last.mode == "getall" and "fast" or "page by page")
+    if not ns.FullScan.groups then
+      tip[#tip + 1] = "Scan again this session to hunt for deals: the offers themselves aren't kept between reloads."
+    end
   else
-    self.status:SetText("No full scan yet on this realm and faction.")
+    self.status:SetText("No full scan yet")
+    tip[1] = "No full scan yet on this realm and faction"
+    tip[2] = "Scan once a day or so: market values get more reliable with every day of history."
   end
   local wait = ns.FullScan:GetAllReadyIn()
   if wait > 0 and ns.db.dealFilters.mode == "getall" then
-    self.status:SetText(self.status:GetText() .. format("   |cff888888fast scan again in %d min|r", math.ceil(wait / 60)))
+    tip[#tip + 1] = format("Fast scan available again in %d min (page by page is used until then).", math.ceil(wait / 60))
   end
+  self.statusTip = tip
 end
 
 function D:StartScan()

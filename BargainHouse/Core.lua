@@ -81,6 +81,12 @@ function ns.Me()
   return UnitName("player")
 end
 
+function ns.Commas(n)
+  local s2, k = tostring(n), 0
+  repeat s2, k = s2:gsub("^(%d+)(%d%d%d)", "%1,%2") until k == 0
+  return s2
+end
+
 local function Commas(n)
   local s, k = tostring(n), 0
   repeat s, k = s:gsub("^(%d+)(%d%d%d)", "%1,%2") until k == 0

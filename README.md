@@ -11,6 +11,7 @@ Everything works on a stock 3.3.5a client. No libraries, no dependencies.
 - **Game version:** 3.3.5a (WotLK) - it will **not** work on Classic, Cataclysm or retail clients
 - **Addon version:** 1.0.0
 - **Author:** Anguish
+- **License:** free to use in game; no modification, reuse or redistribution (see [LICENSE](LICENSE))
 
 ---
 
@@ -68,8 +69,9 @@ Everything works on a stock 3.3.5a client. No libraries, no dependencies.
 Requires a **World of Warcraft 3.3.5a** client. Later game versions changed the auction, trade skill and
 addon-message APIs this addon is built on, so it only runs on 3.3.5a.
 
-1. Download the folder and place it so the path is:
+1. Copy the **BargainHouse** folder from this repository into your AddOns folder, so the path is:
    `World of Warcraft\Interface\AddOns\BargainHouse\BargainHouse.toc`
+   (this README and the license sit beside that folder in the repository, not inside it)
 2. Restart the game (or `/reload`) and enable **BargainHouse** on the character select screen.
 3. Talk to any auctioneer: BargainHouse opens instead of the default window.
 
@@ -357,3 +359,19 @@ That character has the profession, but the recipe isn't confirmed. Open their pr
 
 Bug reports are most useful with the exact in-game text: the chat line, the status line, or the Sync log
 with **Detailed log** enabled.
+
+---
+
+## License
+
+**BargainHouse is not open source.** It is free to use in game, and nothing more:
+
+- **You may** install and use it on your own computers and game accounts, keep backups, change your own
+  settings, and quote short code excerpts when reporting a problem.
+- **You may not** modify it, reuse any part of its code in another addon or program, or redistribute,
+  repackage, host or sell it.
+
+See [LICENSE](LICENSE) for the exact terms. For anything beyond that, ask the author.
+
+BargainHouse is an independent addon and is not made by, endorsed by, or affiliated with Blizzard
+Entertainment.
