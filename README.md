@@ -357,10 +357,3 @@ That character has the profession, but the recipe isn't confirmed. Open their pr
 
 Bug reports are most useful with the exact in-game text: the chat line, the status line, or the Sync log
 with **Detailed log** enabled.
-
----
-
-## License
-
-No license file is included yet. Add one before publishing if you want others to reuse the code; MIT is the
-usual choice for WoW addons.
