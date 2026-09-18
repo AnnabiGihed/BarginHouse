@@ -1,0 +1,32 @@
+## Interface: 30300
+## Title: |cff33d999Bargain|rHouse
+## Notes: Auction house replacement for WoW 3.3.5a: smart search, cheapest-first buying, shopping lists, crafting profit, deals and multi-account sync.
+## Author: Anguish
+## Version: 1.0.0
+## SavedVariables: BargainHouseDB
+
+Core.lua
+Vendor.lua
+Widgets.lua
+Scanner.lua
+Buyer.lua
+MaterialsPanel.lua
+Recipes.lua
+Sync.lua
+GuildBank.lua
+Inventory.lua
+Characters.lua
+Deals.lua
+Watch.lua
+BrowseTab.lua
+ShoppingTab.lua
+CraftingTab.lua
+ProfitCheck.lua
+DealsTab.lua
+CharactersTab.lua
+SyncTab.lua
+SellTab.lua
+AuctionsTab.lua
+SettingsTab.lua
+Minimap.lua
+MainFrame.lua
