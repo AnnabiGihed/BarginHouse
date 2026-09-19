@@ -42,8 +42,17 @@ function T:Create(parent)
   sync.tooltip = "Contact your accounts and exchange anything that differs"
   sync:SetScript("OnClick", function() ns.Sync:ConnectNow() ; T:Refresh() end)
 
+  local getScan = ns.Button(f, "Get their scan", 120, 26)
+  getScan:SetPoint("LEFT", sync, "RIGHT", 6, 0)
+  getScan.tooltip = "Ask every connected account for their latest auction house scan"
+  getScan:SetScript("OnClick", function()
+    local asked = ns.Sync:RequestScans()
+    if asked == 0 then ns.Sync:Log("No connected account has announced a scan yet.") end
+    T:Refresh()
+  end)
+
   local unlink = ns.Button(f, "Unlink", 80, 26, "danger")
-  unlink:SetPoint("LEFT", sync, "RIGHT", 6, 0)
+  unlink:SetPoint("LEFT", getScan, "RIGHT", 16, 0)
   unlink:SetScript("OnClick", function()
     local a = T.selected
     if not a then return end

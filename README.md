@@ -9,7 +9,7 @@ replaces Blizzard's auction window with a faster one built around three question
 Everything works on a stock 3.3.5a client. No libraries, no dependencies.
 
 - **Game version:** 3.3.5a (WotLK) - it will **not** work on Classic, Cataclysm or retail clients
-- **Addon version:** 1.2.0 (see [CHANGELOG.md](CHANGELOG.md))
+- **Addon version:** 1.6.0 (see [CHANGELOG.md](CHANGELOG.md))
 - **Author:** Anguish
 - **License:** free to use in game; no modification, reuse or redistribution (see [LICENSE](LICENSE))
 
@@ -24,6 +24,7 @@ Everything works on a stock 3.3.5a client. No libraries, no dependencies.
   - [Browse](#browse)
   - [Shopping](#shopping)
   - [Crafting](#crafting)
+- [Level up](#level-up)
   - [Deals](#deals)
   - [Watchlist](#watchlist)
   - [Sell](#sell)
@@ -71,7 +72,7 @@ addon-message APIs this addon is built on, so it only runs on 3.3.5a.
 
 1. Copy the **BargainHouse** folder from this repository into your AddOns folder, so the path is:
    `World of Warcraft\Interface\AddOns\BargainHouse\BargainHouse.toc`
-   (this README, the changelog and the license sit beside that folder in the repository, not inside it)
+   (the README, changelog, licence and tools folder sit beside it in the repository, not inside it)
 2. Restart the game (or `/reload`) and enable **BargainHouse** on the character select screen.
 3. Talk to any auctioneer: BargainHouse opens instead of the default window.
 
@@ -99,7 +100,7 @@ None of this is mandatory; the addon simply tells you what it doesn't know yet.
 
 ## The window
 
-Tabs at an auctioneer: **Browse, Shopping, Crafting, Deals, Sell, Auctions, Characters, Sync**, plus
+Tabs at an auctioneer: **Browse, Shopping, Crafting, Deals, Sell, Auctions, Characters, Sync, Level up**, plus
 Settings behind the gear button. Away from an auctioneer only the tabs that work offline are shown.
 
 ### Browse
@@ -115,6 +116,7 @@ Settings behind the gear button. Away from an auctioneer only the tabs that work
 - **Quantity to buy**: type the amount you need. The addon highlights the cheapest combination of stacks,
   shows the total, and buys them all. If stack sizes make a slightly larger purchase cheaper, the extra is
   shown in orange (this can be turned off in Settings).
+- **Reset** clears the text and all filters, keeping your matching mode.
 - **Favourites and history** for searches you repeat. The whole search row (mode, category, rarity, level
   range, price and checkboxes) is remembered between sessions.
 
@@ -147,6 +149,26 @@ to skip it, right-click to open it in Browse, then **Buy everything**.
   value, revenue after the 5% auction cut, and the profit or loss per craft and in total.
   Enchanting is handled as scrolls: the product is `Scroll of <recipe>` and the **vellum** is added as a
   material.
+
+### Level up
+
+Pick a profession and the skill you want to reach. The cheapest route is worked out from live material
+prices: each step shows the skill range it covers, what to make, how many crafts, what it costs, the cost
+per skill point, and where the recipe comes from. **Find materials** subtracts what you already own and
+prices the rest, then buys it with one confirmation.
+
+Only routes you can actually take are suggested: recipes from drops, quests, discovery or reputation are
+left out unless you know them, recipes sold as items must be on the auction house, and materials must be in
+your bags, at a vendor, or on the auction house. Select a step and press **Reject step** if you can't or
+won't do it, and the plan is redone without it, or **Find recipe on AH** to look that recipe up in Browse.
+
+**Points per skill-up** matters: retail rules give 1 per successful craft, Warmane's Icecrown gives 3. Leave
+it on Auto and it is learned from your own skill-ups, or set it yourself.
+
+Every recipe carries all four thresholds, so the planner knows where it is orange (always a point), yellow
+(usually), green (sometimes) and grey (never), and never suggests something below the skill needed to make
+it. Data covers all eleven professions including Cooking and First Aid (3,567 recipes). A recipe shown in
+yellow has an estimated skill threshold; opening that profession window once corrects it permanently.
 
 ### Deals
 
@@ -284,7 +306,11 @@ Sync is managed entirely in the **Sync** tab.
 
 ## Performance and combat
 
-- No script runs every frame while idle; timers switch themselves off.
+- No script runs every frame while idle; timers switch themselves off, and the loops that do run allocate
+  nothing (about 0.3 KB of garbage per 100 seconds of play).
+- Profession data is held as text and unpacked only for the profession you are planning, so it costs about
+  794 KB at rest rather than 4.4 MB.
+- Working out a full 1-450 levelling plan takes a few milliseconds.
 - Sync checks ten times a second and **pauses completely during combat**: nothing is sent and nothing is
   applied until the fight ends.
 - Large incoming data is applied in slices (at most 150 entries per frame).
@@ -356,6 +382,9 @@ That character has the profession, but the recipe isn't confirmed. Open their pr
 ## For developers
 
 - Pure Lua 5.1 for the 3.3.5a client (interface 30300), no external libraries.
+- `tools/generate_profession_data.py` rebuilds `ProfessionData.lua` from a client's `SkillLineAbility.dbc`
+  and `Spell.dbc`, a WotLK world database dump and (optionally) AtlasLoot. The shipped data is exactly
+  what it produces, so it can be regenerated for another server or patch.
 - ~9,600 lines across 25 files; each tab is a module under a shared namespace, with reusable widgets
   (`Widgets.lua`), one auction query engine (`Scanner.lua`) and one purchase engine (`Buyer.lua`).
 - The addon is developed against a **mock of the 3.3.5a API**: 26 test suites drive the real addon files

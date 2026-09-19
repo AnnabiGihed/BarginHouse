@@ -152,6 +152,7 @@ function Y:LearnAccount(id, name, t)
     end
   end
   a.t = math.max(a.t or 0, t or time())
+  self.targetCache = nil
   if isNew then
     self:Log(format("Linked a new account (%s)", name and Proper(name) or id:sub(1, 6)))
     self.gossipDirty = true
@@ -184,6 +185,8 @@ function Y:IsTrusted(name)
 end
 
 function Y:Targets()
+  -- rebuilt only when the accounts or invitations change
+  if self.targetCache then return self.targetCache end
   local out = {}
   for _, a in pairs(self:Accounts()) do
     for lname in pairs(a.names or {}) do out[lname] = Proper(lname) end
@@ -198,8 +201,11 @@ function Y:Targets()
       if ns.Chars:IsLocal(name) then out[lname] = nil end -- same account: nothing to sync
     end
   end
+  self.targetCache = out
   return out
 end
+
+function Y:ForgetTargets() self.targetCache = nil end
 
 function Y:AccountList()
   local out = {}
@@ -254,7 +260,8 @@ end
 function Y:Pump(elapsed)
   self.budget = math.min(BURST, self.budget + CPS * elapsed)
   if InCombat() then return end
-  for _, q in ipairs({ self.control, self.bulk }) do
+  for lane = 1, 2 do                       -- no table per tick: control, then bulk
+    local q = (lane == 1) and self.control or self.bulk
     while Peek(q) and self.budget >= #Peek(q).text + #PREFIX do
       local m = Pop(q)
       self.budget = self.budget - #m.text - #PREFIX
@@ -625,6 +632,7 @@ function Y:Invite(name)
   if ns.Chars and ns.Chars:IsLocal(name) then return false, name .. " is on this account already." end
   if self:IsTrusted(name) then return false, name .. " is already linked." end
   self.invites[strlower(name)] = GetTime()
+  self.targetCache = nil
   self:SendBoth(name, "I" .. VERSION .. "~" .. self:AccountId())
   self:Log("Invitation sent to " .. name .. " - accept it on that account.")
   return true
@@ -836,6 +844,7 @@ function Y:Handle(msg, sender, dist)
   elseif kind == "A" then
     local mkey, t = msg:sub(2):match("^(.-)~(%d+)$")
     t = tonumber(t)
+    s.theirScan, s.theirKey = t, mkey          -- for the Sync tab and /bh diag
     if not t or t == 0 or not ns.FullScan or not ns.MarketKey or mkey ~= Clean(ns.MarketKey()) then return end
     local latest = ns.FullScan:LatestScan()
     if (not latest or t > latest.t + 60) and not ns.FullScan.active and (s.scanRequested or 0) ~= t then
@@ -1058,6 +1067,41 @@ function Y:RecipesChanged()
   end)
 end
 
+-- ask every connected account for their scan, ignoring the usual "only if much
+-- newer" rule: used by the "Get their scan" button
+function Y:RequestScans()
+  if not ns.MarketKey or not ns.FullScan then return 0 end
+  local asked = 0
+  self:ForActive(function(name)
+    local s = Y:Session(name)
+    if s.theirScan and s.theirScan > 0 and s.theirKey == Clean(ns.MarketKey()) then
+      s.scanRequested = s.theirScan
+      Y:Send(name, "Q" .. s.theirScan)
+      asked = asked + 1
+    else
+      Y:Send(name, format("A%s~%d", Clean(ns.MarketKey()),
+        (ns.FullScan:LatestScan() or { t = 0 }).t))   -- nudge them to announce theirs
+    end
+  end)
+  self:Log(format("Asked %d connected account%s for their auction scan", asked, asked == 1 and "" or "s"))
+  return asked
+end
+
+-- what each connected account has told us about scans
+function Y:ScanStatus()
+  local out = {}
+  local mine = ns.FullScan and ns.FullScan:LatestScan()
+  local targets = self:Targets()
+  for key, s in pairs(self.sessions) do
+    if targets[key] then
+      out[#out + 1] = { name = targets[key], connected = s.active and true or false,
+                        theirScan = s.theirScan, sameRealm = s.theirKey == nil or s.theirKey == Clean(ns.MarketKey and ns.MarketKey() or "") }
+    end
+  end
+  table.sort(out, function(a, b) return a.name < b.name end)
+  return out, mine and mine.t or 0
+end
+
 function Y:ScanChanged()
   if not ns.db or not ns.db.syncEnabled or not ns.MarketKey then return end
   local latest = ns.FullScan:LatestScan()
@@ -1085,6 +1129,7 @@ function Y:ForgetAccount(id, t, fromPartner)
   if not id then return end
   local a = self:Accounts()[id]
   self:Removed()[id] = t or time()
+  self.targetCache = nil
   if a then
     for lname in pairs(a.names or {}) do
       self.sessions[lname] = nil

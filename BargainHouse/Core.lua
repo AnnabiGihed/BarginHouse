@@ -13,6 +13,9 @@ ns.DEFAULTS = {
   tooltipPrices = true,
   searchMode = "CONTAINS",
   browse = {},         -- the Browse search row, remembered between sessions
+  skillGain = 0,       -- points per skill-up (0 = work it out from your own skill-ups)
+  skillGainSeen = {},
+  skillBands = {},     -- recipe thresholds confirmed in your profession windows
   rightClickSell = true, -- right-click a bag item to put it in the sell slot
   maxPages = 25,
   hideBidOnly = false,
@@ -636,6 +639,17 @@ SlashCmdList.BARGAINHOUSE = function(msg)
   elseif msg == "diag" then
     ns.Print("Right-click selling:")
     for _, line in ipairs(ns.SellDiagnostics()) do ns.Print(line) end
+    ns.Print("Auction scan sharing:")
+    local list, mine = ns.Sync:ScanStatus()
+    ns.Print(format("  my latest scan: %s", mine > 0 and (date("%d/%m %H:%M", mine) .. " (" .. ns.TimeAgo(time() - mine) .. ")") or "none"))
+    ns.Print(format("  realm and faction key: %s", ns.MarketKey and ns.MarketKey() or "?"))
+    if #list == 0 then ns.Print("  no other account is linked") end
+    for _, p in ipairs(list) do
+      ns.Print(format("  %s: %s, their scan: %s%s", p.name,
+        p.connected and "connected" or "not connected",
+        p.theirScan and p.theirScan > 0 and (ns.TimeAgo(time() - p.theirScan) .. " old") or "not announced yet",
+        p.sameRealm and "" or " |cffff5555(different realm or faction)|r"))
+    end
 
   elseif msg == "autobuy" then
     ns.db.clickMode = false

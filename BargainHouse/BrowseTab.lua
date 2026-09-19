@@ -62,14 +62,14 @@ function B:Create(parent)
   self.frame = f
 
   -- Row 1: search ---------------------------------------------------------
-  local search = ns.EditBox(f, 230, 26, "Search items...  (Enter)")
+  local search = ns.EditBox(f, 208, 26, "Search items...  (Enter)")
   search:SetPoint("TOPLEFT", 0, 0)
   search.onEnter = function() B:DoSearch() end
   search.onChange = function() B:UpdateFavButton() end
   search.acceptsLinks = "replace"
   self.search = search
 
-  local mode = ns.Dropdown(f, 118, 26, function(v)
+  local mode = ns.Dropdown(f, 112, 26, function(v)
     ns.db.searchMode = v
     B:SaveFilters()
     B:UpdateFavButton()
@@ -80,7 +80,7 @@ function B:Create(parent)
   mode.tooltip = "How the name is matched.\nWildcard: * = anything, ? = one character (e.g. frost*cloth)"
   self.mode = mode
 
-  local cat = ns.Dropdown(f, 132, 26, function() B:UpdateSubclasses() B:SaveFilters() end)
+  local cat = ns.Dropdown(f, 126, 26, function() B:UpdateSubclasses() B:SaveFilters() end)
   cat:SetPoint("LEFT", mode, "RIGHT", 6, 0)
   local catItems = { { value = 0, text = "All categories" } }
   for i, name in ipairs({ GetAuctionItemClasses() }) do
@@ -90,24 +90,24 @@ function B:Create(parent)
   cat:SetValue(0, true)
   self.cat = cat
 
-  local sub = ns.Dropdown(f, 132, 26, function() B:SaveFilters() end)
+  local sub = ns.Dropdown(f, 126, 26, function() B:SaveFilters() end)
   sub:SetPoint("LEFT", cat, "RIGHT", 6, 0)
   self.sub = sub
   self:UpdateSubclasses()
 
-  local go = ns.Button(f, "Search", 100, 26, "accent")
+  local go = ns.Button(f, "Search", 88, 26, "accent")
   go:SetPoint("LEFT", sub, "RIGHT", 6, 0)
   go:SetScript("OnClick", function()
     if B.scanning then ns.Scanner:Stop() else B:DoSearch() end
   end)
   self.go = go
 
-  local saved = ns.Button(f, "Saved", 76, 26)
+  local saved = ns.Button(f, "Saved", 68, 26)
   saved:SetPoint("LEFT", go, "RIGHT", 6, 0)
   saved.tooltip = "Favorite and recent searches"
   saved:SetScript("OnClick", function(btn) B:OpenSaved(btn) end)
 
-  local fav = ns.Button(f, "+ Fav", 58, 26)
+  local fav = ns.Button(f, "+ Fav", 54, 26)
   fav:SetPoint("LEFT", saved, "RIGHT", 6, 0)
   fav.tooltip = "Save the current search (text + mode) as a favorite"
   fav:SetScript("OnClick", function()
@@ -115,6 +115,12 @@ function B:Create(parent)
     B:UpdateFavButton()
   end)
   self.fav = fav
+
+  local reset = ns.Button(f, "Reset", 54, 26)
+  reset:SetPoint("LEFT", fav, "RIGHT", 6, 0)
+  reset.tooltip = "Clear the search text and every filter.\nHow names are matched is left as it is."
+  reset:SetScript("OnClick", function() B:ResetSearch() end)
+  self.resetBtn = reset
 
   -- Row 2: filters --------------------------------------------------------
   local lvl = ns.Text(f, "BHFontSmall", "Level")
@@ -351,6 +357,29 @@ function B:Create(parent)
 end
 
 -- the search row is remembered between sessions
+-- Clear everything except the matching mode, which people set once and keep
+function B:ResetSearch()
+  self.loadingFilters = true
+  self.search:SetTextSilent("")
+  self.cat:SetValue(0, true)
+  self:UpdateSubclasses()
+  self.sub:SetValue(0, true)
+  self.rarity:SetValue(-1, true)
+  self.minL:SetTextSilent("")
+  self.maxL:SetTextSilent("")
+  self.usable:SetChecked(false)
+  self.deals:SetChecked(false)
+  self.hideBid:SetChecked(false)
+  ns.db.hideBidOnly = false
+  self.maxPrice:SetCopper(0)
+  self.loadingFilters = false
+  self:SaveFilters()
+  self:UpdateFavButton()
+  self:BuildGroups()
+  self:SetStatus("Filters cleared. Matching stays on " .. (self.mode.label and self.mode.label.GetText and self.mode.label:GetText() or "the same mode") .. ".")
+  self.search:SetFocus()
+end
+
 function B:SaveFilters()
   if self.loadingFilters or not self.mode then return end
   ns.db.browse = {
@@ -456,6 +485,15 @@ function B:SetScanning(on)
     self.go:SetStyle("accent")
   end
   self:UpdateBuyBar()
+end
+
+-- Open Browse on a given search: used by the other tabs
+function B:SearchFor(text, mode)
+  if not text or text == "" then return end
+  if ns.main then ns.main:SelectTab(1) end
+  self.search:SetTextSilent(text)
+  if mode then self.mode:SetValue(mode) end
+  self:DoSearch()
 end
 
 function B:DoSearch()
@@ -824,8 +862,9 @@ function B:UpdateBuyBar()
     buy:SetText("Buy  " .. ns.Money(a.buyout))
     buy:Enable()
   else
-    buy:SetText("Buy")
-    buy:Disable()
+    -- not looked up yet: the button still works, it just checks first
+    buy:SetText("Buy  " .. ns.Money(a.buyout))
+    buy:Enable()
   end
   ns.Enable(bid, st == "READY" and not mine and not self.scanning)
 end
@@ -847,20 +886,36 @@ end
 
 -- Single offer: pre-locate so the Buy button is one click
 function B:PrepareBuy(a)
-  if not a or not ns.atAH or self.queue then return end
+  if not a or self.queue then return end
+  if not ns.atAH then
+    self:SetStatus("Buying needs an open auction house.")
+    return
+  end
   local token = {}
   self.locateToken = token
   self.buyState = "LOCATING"
+  self.locateStarted = GetTime()
   self:UpdateBuyBar()
+  -- watchdog: never leave the button stuck on "Locating..."
+  ns.After(10, function()
+    if B.locateToken == token and B.buyState == "LOCATING" and B.selAuction == a then
+      B.buyState = nil
+      B:SetStatus("Couldn't check that offer - click Buy to try again.")
+      B:UpdateBuyBar()
+    end
+  end)
   ns.Locate(a, self.lastParams, function()
     if B.locateToken ~= token or B.selAuction ~= a then return end
     B.buyState = "READY"
+    B:SetStatus(format("Ready: %s for %s.", a.name or "that offer", ns.Money(a.buyout or 0)))
     B:UpdateBuyBar()
   end, function(interrupted)
     if B.locateToken ~= token or B.selAuction ~= a then return end
     if interrupted then
-      -- another scan interrupted us: try again in a moment
+      -- another scan took the auction house: try again shortly
       B.buyState = nil
+      B:SetStatus("Something else was using the auction house - trying again...")
+      B:UpdateBuyBar()
       ns.After(1.5, function()
         if B.locateToken == token and B.selAuction == a and not B.scanning then B:PrepareBuy(a) end
       end)
@@ -877,11 +932,39 @@ end
 
 function B:Buy(isBid)
   local a = self.selAuction
-  if not a or self.buyState ~= "READY" or self.scanning or self.queue then return end
-  if GetTime() < (self.buyLock or 0) then return end
+  if not a then
+    self:SetStatus("Pick an offer first.")
+    return
+  end
+  if self.queue then return end
+  if self.scanning then
+    self:SetStatus("Still searching - one moment.")
+    return
+  end
+  if a.owner and a.owner == ns.Me() then
+    self:SetStatus("That is your own auction.")
+    return
+  end
+  if not isBid and (not a.buyout or a.buyout <= 0) then
+    self:SetStatus("That offer has no buyout, only bids.")
+    return
+  end
+  if GetTime() < (self.buyLock or 0) then return end   -- double click guard
+
+  if self.buyState == "LOCATING" then
+    self:SetStatus("Finding that offer on the auction house...")
+    return
+  end
+  if self.buyState ~= "READY" then
+    -- not checked yet (or the check failed): look it up now and say so
+    self:SetStatus("Finding that offer on the auction house...")
+    self:PrepareBuy(a)
+    return
+  end
 
   local idx = ns.FindInList(a)
   if not idx then
+    self:SetStatus("That offer moved - finding it again...")
     self:PrepareBuy(a)
     return
   end
@@ -896,14 +979,19 @@ function B:Buy(isBid)
   else
     amount = buyout
   end
-  if not amount or amount <= 0 then return end
+  if not amount or amount <= 0 then
+    self:SetStatus("Nothing to pay for that offer - it may have just been bought.")
+    self:PrepareBuy(a)
+    return
+  end
   if GetMoney() < amount then
     UIErrorsFrame:AddMessage(ERR_NOT_ENOUGH_MONEY or "Not enough money", 1, 0.2, 0.2)
+    self:SetStatus(format("You need %s for that offer.", ns.Money(amount)))
     return
   end
 
   PlaceAuctionBid("list", idx, amount)
-  self.buyLock = GetTime() + 0.5
+  self.buyLock = GetTime() + 0.3
   if not isBid then ns.RecordPurchase(a) end
 
   if isBid then

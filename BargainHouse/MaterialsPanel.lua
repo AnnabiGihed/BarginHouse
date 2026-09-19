@@ -552,6 +552,7 @@ end
 
 function Panel:ScanFinished(aborted)
   self:SetScanState(false)
+  if self.opts.onFinished then pcall(self.opts.onFinished, aborted) end
   for _, e in ipairs(self.entries) do
     if e.state == "pending" or e.state == "scanning" then e.state = nil end
   end

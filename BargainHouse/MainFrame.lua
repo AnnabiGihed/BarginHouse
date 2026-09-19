@@ -1,7 +1,7 @@
 local ADDON, ns = ...
 local C = ns.C
 
-local TABS = { "Browse", "Shopping", "Crafting", "Deals", "Sell", "Auctions", "Settings", "Characters", "Sync" }
+local TABS = { "Browse", "Shopping", "Crafting", "Deals", "Sell", "Auctions", "Settings", "Characters", "Sync", "Level up" }
 local SETTINGS_TAB = 7
 
 function ns.CreateMain()
@@ -55,15 +55,19 @@ function ns.CreateMain()
   logo:SetTexture("Interface\\Icons\\INV_Misc_Coin_02")
   logo:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
-  local title = ns.Text(tb, "BHFontTitle", ns.ACCENT .. "Bargain|rHouse")
-  title:SetPoint("LEFT", logo, "RIGHT", 8, 0)
+  -- Your gold sits on the left, beside the logo: the tab row needs the space on
+  -- the right, and with ten tabs it used to run underneath these buttons.
+  local money = ns.Text(tb, "BHFontNormal", "", "LEFT")
+  money:SetPoint("LEFT", logo, "RIGHT", 8, 0)
+  ns.Size(money, 128, 18)
+  f.moneyText = money
 
   -- Tabs
   f.tabs, f.pages = {}, {}
   local prev
   for i, name in ipairs(TABS) do
-    local t = ns.Button(tb, name, 68, 34, "flat")
-    if i == 1 then t:SetPoint("LEFT", 146, 0) else t:SetPoint("LEFT", prev, "RIGHT", 1, 0) end
+    local t = ns.Button(tb, name, name == "Level up" and 70 or 64, 34, "flat")
+    if i == 1 then t:SetPoint("LEFT", 150, 0) else t:SetPoint("LEFT", prev, "RIGHT", 1, 0) end
     t.bar = t:CreateTexture(nil, "OVERLAY")
     t.bar:SetTexture(ns.WHITE)
     t.bar:SetHeight(2)
@@ -96,8 +100,6 @@ function ns.CreateMain()
   blizz.tooltip = "Open Blizzard's auction house for this visit.\n(Bids and other rarely used features live there.)"
   blizz:SetScript("OnClick", function() ns.OpenBlizzard() end)
 
-  local money = ns.Text(tb, "BHFontNormal", "", "RIGHT")
-  money:SetPoint("RIGHT", blizz, "LEFT", -14, 0)
   local function UpdateMoney() money:SetText(ns.Money(GetMoney(), true)) end
   f:RegisterEvent("PLAYER_MONEY")
   f:SetScript("OnEvent", UpdateMoney)
@@ -116,6 +118,7 @@ function ns.CreateMain()
   f.pages[7] = ns.Settings:Create(content)
   f.pages[8] = ns.CharactersTab:Create(content)
   f.pages[9] = ns.SyncTab:Create(content)
+  f.pages[10] = ns.LevelingTab:Create(content)
 
   function f:SelectTab(index)
     ns.CloseMenu()
@@ -140,7 +143,7 @@ function ns.CreateMain()
   f:Hide()
 
   -- At an auctioneer: every tab. Anywhere else: only what works without the AH.
-  local OFFLINE_TABS = { [2] = true, [3] = true, [8] = true, [9] = true }
+  local OFFLINE_TABS = { [2] = true, [3] = true, [8] = true, [9] = true, [10] = true }
   local awayText = ns.Text(tb, "BHFontSmall", "|cff888888Away from the auction house|r")
   f.awayText = awayText
   function f:SetMode(atAH)
@@ -151,7 +154,7 @@ function ns.CreateMain()
         if atAH or OFFLINE_TABS[i] then
           t:Show()
           t:ClearAllPoints()
-          if prev then t:SetPoint("LEFT", prev, "RIGHT", 1, 0) else t:SetPoint("LEFT", 146, 0) end
+          if prev then t:SetPoint("LEFT", prev, "RIGHT", 1, 0) else t:SetPoint("LEFT", 150, 0) end
           prev = t
         else
           t:Hide()
