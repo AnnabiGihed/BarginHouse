@@ -36,8 +36,14 @@ function D:Create(parent)
   search.onEnter = function() D:Sort() end
   self.search = search
 
+  local watchRefresh = ns.Button(f, "Check now", 84, 28)
+  watchRefresh:SetPoint("RIGHT", search, "LEFT", -6, 0)
+  watchRefresh.tooltip = "Check every watched item right now, without waiting for the timer"
+  watchRefresh:SetScript("OnClick", function() D:CheckWatchNow() end)
+  self.watchRefresh = watchRefresh
+
   local watchBtn = ns.Button(f, "Watchlist", 90, 28)
-  watchBtn:SetPoint("RIGHT", search, "LEFT", -6, 0)
+  watchBtn:SetPoint("RIGHT", watchRefresh, "LEFT", -6, 0)
   watchBtn.tooltip = "Keep an eye on chosen items and get told when a cheap offer appears"
   watchBtn:SetScript("OnClick", function()
     if D.watchFrame:IsShown() then D.watchFrame:Hide() else D.watchFrame:Show(); D:RefreshWatch() end
@@ -487,6 +493,55 @@ function D:BuyFinished(q, reason)
   self:Refresh()
   self.status:SetText(format("%sBought %d items for %s. Resell them from the Sell tab.",
     reason and (reason .. "  ") or "", q.bought, ns.Money(q.spent, true)))
+
+  -- take a fresh look at what was bought, so the list shows what is left now
+  local items, seen = {}, {}
+  for _, item in ipairs(q.list) do
+    local d = item.deal
+    if d and not seen[d.name] then
+      seen[d.name] = true
+      items[#items + 1] = { id = d.id, name = d.name, params = d.params or { name = d.name }, watch = d.watch }
+    end
+  end
+  self:RecheckBought(items, 1, q)
+end
+
+-- re-query the items just bought, one after another
+function D:RecheckBought(items, index, q)
+  local item = items[index]
+  if not item or self.queue or ns.FullScan.active then return end
+  local lname, found = strlower(item.name), {}
+  local me = ns.Me()
+  self.rechecking = true
+  self:UpdateBar()
+  ns.Scanner:Start({
+    params = item.params,
+    page = 0,
+    maxPages = 3,
+    onPage = function(entries)
+      for _, a in ipairs(entries) do
+        if strlower(a.name) == lname then
+          a.unit = a.buyout > 0 and (a.buyout / a.count) or nil
+          if a.unit and a.owner ~= me then found[#found + 1] = a end
+        end
+      end
+    end,
+    onDone = function(aborted)
+      D.rechecking = nil
+      if aborted then return end
+      local id = item.id or (found[1] and ns.ItemID(found[1].link))
+      if id then ns.FullScan:ReplaceItem(id, item.name, found) end
+      if item.watch then ns.Watch:Evaluate(item.watch, found) end
+      D:Refresh()
+      if index < #items then
+        D:RecheckBought(items, index + 1, q)
+      elseif q then
+        D.status:SetText(format("Bought %d items for %s. %s",
+          q.bought, ns.Money(q.spent, true),
+          #D.deals > 0 and "The list now shows what is still on offer." or "Nothing left at these prices."))
+      end
+    end,
+  })
 end
 
 ---------------------------------------------------------------------------
@@ -541,11 +596,17 @@ function D:CreateWatch(parent)
   end)
   self.watchRemove = remove
 
+  local checkNow = ns.Button(w, "Check all now", 110, 24, "accent")
+  checkNow:SetPoint("LEFT", remove, "RIGHT", 16, 0)
+  checkNow.tooltip = "Check every watched item right away"
+  checkNow:SetScript("OnClick", function() D:CheckWatchNow() end)
+  self.watchNow = checkNow
+
   local enabled = ns.Check(w, "Keep checking", function(_, on)
     ns.db.watchEnabled = on
     ns.Watch:Kick()
   end)
-  enabled:SetPoint("LEFT", remove, "RIGHT", 16, 0)
+  enabled:SetPoint("LEFT", checkNow, "RIGHT", 16, 0)
   enabled:SetChecked(ns.db.watchEnabled ~= false)
 
   local el = ns.Text(w, "BHFontSmall", "Check every")
@@ -617,6 +678,17 @@ function D:CreateWatch(parent)
   ns.Enable(remove, false)
 end
 
+function D:CheckWatchNow()
+  local ok, err = ns.Watch:CheckAllNow()
+  if not ok then
+    self.status:SetText("|cffffaa33" .. err .. "|r")
+    if self.watchNote then self.watchNote:SetText("|cffffaa33" .. err .. "|r") end
+    return
+  end
+  self.status:SetText(format("Checking %d watched item%s...", ns.Watch:Remaining(), ns.Watch:Remaining() == 1 and "" or "s"))
+  self:RefreshWatch()
+end
+
 function D:AddWatch()
   local ok, err = ns.Watch:Add(self.watchName:GetText(), self.watchPrice:GetCopper())
   if ok then
@@ -631,6 +703,15 @@ end
 
 function D:RefreshWatch()
   if not self.watchList then return end
+  -- say how a manual check went, once it finishes
+  local busyNow = ns.Watch:Busy()
+  if self.watchWasBusy and not busyNow then
+    local hits, list = 0, ns.Watch:List()
+    for _, item in ipairs(list) do if item.hit then hits = hits + 1 end end
+    self.status:SetText(format("Checked %d watched item%s: %s", #list, #list == 1 and "" or "s",
+      hits > 0 and format("%d with a deal right now", hits) or "nothing cheap at the moment"))
+  end
+  self.watchWasBusy = busyNow
   local list = ns.Watch and ns.Watch:List() or {}
   self.watchList.selected = self.watchSelected
   self.watchList:SetData(list, true)
@@ -638,6 +719,12 @@ function D:RefreshWatch()
   local hits = 0
   for _, item in ipairs(list) do
     if item.hit then hits = hits + 1 end
+  end
+  if self.watchRefresh then
+    local busy = ns.Watch:Busy()
+    self.watchRefresh.label:SetText(busy and format("Checking %d", ns.Watch:Remaining()) or "Check now")
+    ns.Enable(self.watchRefresh, not busy and #list > 0)
+    if self.watchNow then ns.Enable(self.watchNow, not busy and #list > 0) end
   end
   if not ns.atAH then
     self.watchNote:SetText("|cff888888Checking happens at an auctioneer.|r")
@@ -648,7 +735,11 @@ function D:RefreshWatch()
   else
     local every, cycle = ns.Watch:Interval(), ns.Watch:CycleTime()
     local cycleText = cycle >= 60 and format("%d min %02d s", floor(cycle / 60), cycle % 60) or format("%d s", cycle)
-    self.watchNote:SetText(format("%d watched, %d with a deal right now. One item every %d s, so each item about every %s - only while nothing else is scanning or buying.",
-      #list, hits, every, cycleText))
+    if ns.Watch:Busy() then
+      self.watchNote:SetText(format("Checking now: %d item%s left...", ns.Watch:Remaining(), ns.Watch:Remaining() == 1 and "" or "s"))
+    else
+      self.watchNote:SetText(format("%d watched, %d with a deal right now. One item every %d s, so each item about every %s - only while nothing else is scanning or buying.",
+        #list, hits, every, cycleText))
+    end
   end
 end

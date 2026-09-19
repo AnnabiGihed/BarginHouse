@@ -13,7 +13,7 @@ ns.DEFAULTS = {
   tooltipPrices = true,
   searchMode = "CONTAINS",
   browse = {},         -- the Browse search row, remembered between sessions
-  rightClickSell = true, -- right-click a bag item at an auctioneer to sell it
+  rightClickSell = true, -- right-click a bag item to put it in the sell slot
   maxPages = 25,
   hideBidOnly = false,
   undercut = 1,        -- copper
@@ -429,38 +429,86 @@ end
 ---------------------------------------------------------------------------
 -- Auction house replacement
 ---------------------------------------------------------------------------
--- Right-click a bag item to put it in the Sell slot. The game's own bag click
--- function has to be taken over for that, which "taints" it, so this is only
--- installed while you are at an auctioneer and removed again straight after:
--- outside the auction house every click runs through Blizzard's untouched code.
-local originalBagClick
-function ns.InstallBagClick()
-  if originalBagClick or not ContainerFrameItemButton_OnClick then return end
-  if ns.db.rightClickSell == false then return end
-  originalBagClick = ContainerFrameItemButton_OnClick
-  ContainerFrameItemButton_OnClick = function(button, mouse)
-    if mouse == "RightButton" and ns.atAH and ns.main and ns.main:IsShown()
-      and not IsModifiedClick() and not CursorHasItem() then
-      local parent = button and button.GetParent and button:GetParent()
-      local bag = parent and parent.GetID and parent:GetID()
-      local slot = button and button.GetID and button:GetID()
-      if bag and slot then
-        if ns.CanAuction(bag, slot) then
-          ns.Sell:SetItemFromBag(bag, slot)
-        else
-          ns.Print("That item can't be put on the auction house.")
-        end
-        return -- never fall through: using the item here would be blocked anyway
-      end
-    end
-    return originalBagClick(button, mouse)
+-- Right-clicking a bag item only goes to the auction slot when the game's OWN
+-- auction window is open: that check lives in Blizzard's code, and taking that
+-- code over taints the bag buttons for the rest of the session. So instead we
+-- keep Blizzard's window loaded but invisible and parked off-screen, on its
+-- Auctions tab. The game then does the placement itself, and our Sell tab picks
+-- the item up from the auction slot (NEW_AUCTION_UPDATE) as it always has.
+local helperOn
+function ns.EnableSellHelper()
+  if helperOn or ns.db.rightClickSell == false then return end
+  if not ns.db.replaceBlizzard then return end -- the real window is already there
+  if IsAddOnLoaded and not IsAddOnLoaded("Blizzard_AuctionUI") then
+    if not LoadAddOn then return end
+    local ok = LoadAddOn("Blizzard_AuctionUI")
+    if not ok then return end
   end
+  if not AuctionFrame then return end
+  helperOn = true
+  AuctionFrame:SetAlpha(0)
+  AuctionFrame:EnableMouse(false)
+  AuctionFrame:ClearAllPoints()
+  AuctionFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", -5000, 0)
+  for i = #UISpecialFrames, 1, -1 do -- Escape must not close it behind our back
+    if UISpecialFrames[i] == "AuctionFrame" then table.remove(UISpecialFrames, i) end
+  end
+  AuctionFrame:Show()
+  ns.SelectBlizzardSellTab()
+  -- the auction UI can take a moment to settle after loading, so check again
+  ns.After(0.5, function() if helperOn then ns.SelectBlizzardSellTab() end end)
+  ns.After(2, function() if helperOn then ns.SelectBlizzardSellTab() end end)
 end
 
-function ns.RemoveBagClick()
-  if not originalBagClick then return end
-  ContainerFrameItemButton_OnClick = originalBagClick
-  originalBagClick = nil
+-- Put Blizzard's window on its Auctions tab the way a click would, so its own
+-- selectedTab state is right: that state is what the game checks when you
+-- right-click a bag item.
+function ns.SelectBlizzardSellTab()
+  if not AuctionFrame then return end
+  if AuctionFrame.selectedTab ~= 3 then
+    if AuctionFrameTab3 and AuctionFrameTab3.Click then
+      AuctionFrameTab3:Click()
+    elseif AuctionFrameTab_OnClick and AuctionFrameTab3 then
+      AuctionFrameTab_OnClick(AuctionFrameTab3)
+    end
+  end
+  AuctionFrame.selectedTab = 3
+  if AuctionFrameBrowse then AuctionFrameBrowse:Hide() end
+  if AuctionFrameBid then AuctionFrameBid:Hide() end
+  if AuctionFrameAuctions and not AuctionFrameAuctions:IsShown() then AuctionFrameAuctions:Show() end
+end
+
+-- What the game sees right now, for when right-click selling misbehaves
+function ns.SellDiagnostics()
+  local lines = {}
+  local function add(label, value) lines[#lines + 1] = format("  %s: %s", label, tostring(value)) end
+  add("at an auctioneer", ns.atAH and true or false)
+  add("setting enabled", ns.db.rightClickSell ~= false)
+  add("replacing the default window", ns.db.replaceBlizzard and true or false)
+  add("helper active", helperOn and true or false)
+  add("Blizzard auction UI loaded", IsAddOnLoaded and IsAddOnLoaded("Blizzard_AuctionUI") or "?")
+  add("AuctionFrame exists", AuctionFrame ~= nil)
+  if AuctionFrame then
+    add("AuctionFrame shown", AuctionFrame:IsShown())
+    add("AuctionFrame visible", AuctionFrame:IsVisible())
+    add("selected tab (3 = Auctions)", AuctionFrame.selectedTab)
+  end
+  add("Auctions frame shown", AuctionFrameAuctions and AuctionFrameAuctions:IsShown())
+  add("Auctions frame visible", AuctionFrameAuctions and AuctionFrameAuctions:IsVisible())
+  local name = GetAuctionSellItemInfo and GetAuctionSellItemInfo()
+  add("item in the auction slot", name or "none")
+  return lines
+end
+
+function ns.DisableSellHelper()
+  if not helperOn then return end
+  helperOn = false
+  if AuctionFrame then
+    AuctionFrame:Hide()
+    AuctionFrame:SetAlpha(1)
+    AuctionFrame:EnableMouse(true)
+  end
+  UISpecialFrames[#UISpecialFrames + 1] = "AuctionFrame"
 end
 
 function ns.ApplyReplace()
@@ -545,12 +593,12 @@ ev:SetScript("OnEvent", function(self, event, arg1)
 
   elseif event == "AUCTION_HOUSE_SHOW" then
     ns.atAH = true
-    ns.InstallBagClick()
+    ns.EnableSellHelper()
     if ns.db.replaceBlizzard then ns.OpenMain() end
 
   elseif event == "AUCTION_HOUSE_CLOSED" then
     ns.atAH = false
-    ns.RemoveBagClick()
+    ns.DisableSellHelper()
     ns.Scanner:Stop()
     ns.HideMainSilently()
   end
@@ -585,6 +633,10 @@ SlashCmdList.BARGAINHOUSE = function(msg)
     else
       ns.Print("Guild bank: " .. why)
     end
+  elseif msg == "diag" then
+    ns.Print("Right-click selling:")
+    for _, line in ipairs(ns.SellDiagnostics()) do ns.Print(line) end
+
   elseif msg == "autobuy" then
     ns.db.clickMode = false
     ns.Print("Automatic buying re-enabled. If the server blocks it again, page mode switches back on by itself.")
@@ -600,6 +652,7 @@ SlashCmdList.BARGAINHOUSE = function(msg)
     ns.Print("  /bh reset - reset window position and scale")
     ns.Print("  /bh clearprices - wipe the recorded price history")
     ns.Print("  /bh guild - show what is recorded from your guild bank")
+    ns.Print("  /bh diag - why right-click selling isn't working")
     ns.Print("  /bh autobuy - switch back to automatic buying after a block")
   end
 end

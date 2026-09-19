@@ -2,6 +2,66 @@
 
 All notable changes to BargainHouse. Versions follow `major.minor.patch`.
 
+## 1.2.0
+
+### Added
+
+- **Check now** button in the Deals tab (and **Check all now** in the watchlist panel): re-checks every
+  watched item straight away instead of waiting for the timer. It shows progress while it runs, then says
+  what it found, and any deals appear in the list ready to buy. Items whose offers are gone are cleared.
+
+## 1.1.5
+
+### Fixed
+
+- **Right-click still didn't put an item in the sell slot.** The hidden helper window was showing
+  Blizzard's Auctions frame directly, which leaves the window's own `selectedTab` on Browse - and that
+  state is what the game checks when you right-click. The tab is now selected through Blizzard's own tab
+  button, re-checked shortly after the auction house opens and whenever you open the Sell tab.
+
+### Added
+
+- `/bh diag` prints what the game currently sees (helper active, auction UI loaded, window shown, selected
+  tab, item in the slot), to pin down right-click selling if it still misbehaves.
+
+## 1.1.4
+
+### Added
+
+- **Right-click a bag item at an auctioneer to put it in the Create auction slot**, and the Sell tab comes
+  forward. This is done by the game itself: the placement check lives in Blizzard's code and only applies
+  when its own auction window is open, so that window is kept loaded but invisible and parked off-screen
+  on its Auctions tab while you use BargainHouse. No addon code touches the bag click, so nothing can be
+  tainted or blocked.
+- Setting: **Right-click a bag item to put it in the sell slot** (on by default), which turns the hidden
+  helper window off if you'd rather not have it.
+
+## 1.1.3
+
+### Fixed
+
+- **"BargainHouse has been blocked from an action only available to the Blizzard UI" on right-click, for
+  the rest of the session.** 1.1.1 only restored the game's bag click function when the auction house
+  closed, which isn't enough: in WoW, a frame whose click handler has once run addon code stays tainted
+  until you restart the game, so bag right-clicks kept being blocked afterwards, even with the auction
+  house shut and only the auctioneer targeted. The bag click function is no longer touched at all.
+
+### Changed
+
+- Sending an item to the Sell tab from your bags is done with **Alt+Click** (a secure hook, which cannot
+  taint anything) or by dragging it into the slot. Right-click keeps its normal game behaviour everywhere.
+- The setting "Right-click a bag item at an auctioneer to sell it" is gone with the feature.
+
+## 1.1.2
+
+### Fixed
+
+- **Deals were not refreshed after buying.** The list kept showing the snapshot from the last full scan,
+  so bought offers lingered and newly posted ones were missing. After a purchase the items you bought are
+  now re-queried and their rows rebuilt from what the auction house actually has: emptied rows disappear,
+  remaining offers show their real quantity and price, and cheap stacks posted in the meantime appear.
+  Watchlist rows are refreshed the same way.
+
 ## 1.1.1
 
 ### Fixed

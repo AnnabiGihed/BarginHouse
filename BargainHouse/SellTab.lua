@@ -232,7 +232,13 @@ function S:Create(parent)
   f:RegisterEvent("BAG_UPDATE")
   f:SetScript("OnEvent", function(_, event, a1, a2)
     if event == "NEW_AUCTION_UPDATE" then
+      local had = S.item and S.item.name
       S:OnSellItemChanged()
+      -- an item just arrived in the slot (dragged, Alt+clicked or right-clicked
+      -- in the bags): show it
+      if S.item and S.item.name ~= had and ns.main and ns.main:IsShown() and ns.main.current ~= 5 then
+        ns.main:SelectTab(5)
+      end
     elseif event == "AUCTION_MULTISELL_START" then
       S.postStatus:SetText(format("Posting 0 / %d ...", a1 or 0))
     elseif event == "AUCTION_MULTISELL_UPDATE" then
@@ -248,7 +254,10 @@ function S:Create(parent)
     end
   end)
   -- NEW_AUCTION_UPDATE is also handled while other tabs are visible
-  f:SetScript("OnShow", function() S:UpdateItem() end)
+  f:SetScript("OnShow", function()
+    if ns.atAH and ns.SelectBlizzardSellTab then ns.SelectBlizzardSellTab() end
+    S:UpdateItem()
+  end)
 
   self:SetDuration(ns.db.duration)
   self:UpdateItem()

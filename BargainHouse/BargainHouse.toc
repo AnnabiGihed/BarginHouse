@@ -2,7 +2,7 @@
 ## Title: |cff33d999Bargain|rHouse
 ## Notes: Auction house replacement for WoW 3.3.5a: smart search, cheapest-first buying, shopping lists, crafting profit, deals and multi-account sync.
 ## Author: Anguish
-## Version: 1.1.1
+## Version: 1.2.0
 ## X-License: Free to use in game only - no modification, reuse or redistribution (see LICENSE)
 ## X-Website: https://github.com/
 ## SavedVariables: BargainHouseDB

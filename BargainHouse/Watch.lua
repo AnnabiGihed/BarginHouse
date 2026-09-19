@@ -90,15 +90,43 @@ W:SetScript("OnUpdate", function(self, elapsed)
   self.timer = (self.timer or 0) - elapsed
   if self.timer > 0 then return end
   self.timer = 1
-  if GetTime() < (self.nextAt or 0) or Busy() or self.scanning then return end
+  if Busy() or self.scanning then return end
+  if self.pending and #self.pending > 0 then          -- a manual check: no waiting
+    local item = table.remove(self.pending, 1)
+    if #self.pending == 0 then self.pending = nil end
+    if item then self:Check(item, true) end
+    return
+  end
+  if GetTime() < (self.nextAt or 0) then return end
   self.index = ((self.index or 0) % #list) + 1
   self:Check(list[self.index])
 end)
 
-function W:Check(item)
+-- check every watched item right away, ignoring the timer
+function W:CheckAllNow()
+  local list = self:List()
+  if #list == 0 then return false, "Nothing is being watched yet." end
+  if not ns.atAH then return false, "Checking needs an open auction house." end
+  self.pending = {}
+  for _, item in ipairs(list) do self.pending[#self.pending + 1] = item end
+  self.alerted = {}     -- say it again even if the same offers are still there
+  self.nextAt = 0
+  self:Show()
+  return true
+end
+
+function W:Busy()
+  return (self.scanning or (self.pending and #self.pending > 0)) and true or false
+end
+
+function W:Remaining()
+  return (self.pending and #self.pending or 0) + (self.scanning and 1 or 0)
+end
+
+function W:Check(item, manual)
   if not item or self.scanning then return end
   self.scanning = item
-  self.nextAt = GetTime() + self:Interval()
+  if not manual then self.nextAt = GetTime() + self:Interval() end
   local lname = strlower(item.name)
   local found = {}
   ns.Scanner:Start({
@@ -115,8 +143,12 @@ function W:Check(item)
     end,
     onDone = function(aborted)
       W.scanning = nil
-      if aborted then return end
+      if aborted then
+        if W.pending then table.insert(W.pending, 1, item) end -- interrupted: try again
+        return
+      end
       W:Evaluate(item, found)
+      if manual then W.nextAt = GetTime() + W:Interval() end
     end,
   })
 end
@@ -153,7 +185,10 @@ function W:Evaluate(item, auctions)
 
   if #offers == 0 then
     item.hit = nil
-    if ns.DealsTab and ns.DealsTab.list then ns.DealsTab:Refresh() end
+    if ns.DealsTab and ns.DealsTab.list then
+      ns.DealsTab:Refresh()
+      ns.DealsTab:RefreshWatch()
+    end
     return
   end
 
@@ -173,7 +208,10 @@ function W:Evaluate(item, auctions)
       item.link or item.name, qty, ns.Money(cost), ns.Money(offers[1].unit), ns.Money(limit), why or "your price"))
     PlaySound("AuctionWindowOpen")
   end
-  if ns.DealsTab and ns.DealsTab.list then ns.DealsTab:Refresh() end
+  if ns.DealsTab and ns.DealsTab.list then
+    ns.DealsTab:Refresh()
+    ns.DealsTab:RefreshWatch()
+  end
 end
 
 -- watch hits shown in the Deals list (so they can be bought like any deal)

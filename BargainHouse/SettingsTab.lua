@@ -68,17 +68,17 @@ function T:Create(parent)
   confirm:SetChecked(ns.db.confirmBuy)
   y = y - 26
 
-  local rclick = ns.Check(box, "Right-click a bag item at an auctioneer to sell it", function(_, on)
+  local rclick = ns.Check(box, "Right-click a bag item to put it in the sell slot", function(_, on)
     ns.db.rightClickSell = on
     if on then
-      if ns.atAH then ns.InstallBagClick() end
+      if ns.atAH then ns.EnableSellHelper() end
     else
-      ns.RemoveBagClick()
+      ns.DisableSellHelper()
     end
   end)
   rclick:SetPoint("TOPLEFT", 16, y)
   rclick:SetChecked(ns.db.rightClickSell ~= false)
-  rclick.tooltip = "Only active while the auction house is open. Turn it off if you'd rather right-click keep its normal behaviour there."
+  rclick.tooltip = "Keeps the game's own auction window loaded out of sight, so right-click works exactly as it does without addons."
   y = y - 26
 
   local extra = ns.Check(box, "Allow extra items when a bigger stack is cheaper in total", function(_, on)

@@ -9,7 +9,7 @@ replaces Blizzard's auction window with a faster one built around three question
 Everything works on a stock 3.3.5a client. No libraries, no dependencies.
 
 - **Game version:** 3.3.5a (WotLK) - it will **not** work on Classic, Cataclysm or retail clients
-- **Addon version:** 1.1.1 (see [CHANGELOG.md](CHANGELOG.md))
+- **Addon version:** 1.2.0 (see [CHANGELOG.md](CHANGELOG.md))
 - **Author:** Anguish
 - **License:** free to use in game; no modification, reuse or redistribution (see [LICENSE](LICENSE))
 
@@ -168,6 +168,7 @@ Inside Deals. Add items by name or shift-click, with an optional **Alert under**
 item's market value is used, 20% below counts as a deal).
 
 While the auction house is open, one watched item is re-checked per interval (**Check every**: 5s to 5min).
+**Check now** (next to the Watchlist button) checks every watched item immediately instead of waiting.
 When a cheap offer appears you get a chat message with the item link and price, a sound, and the offers
 appear in the deals list marked **Watch**, ready to buy.
 
@@ -175,8 +176,9 @@ Checking only runs when nothing else is scanning or buying, so it never interfer
 
 ### Sell
 
-Drag an item into the slot, **right-click** it in your bags (while you are at an auctioneer; can be turned
-off in Settings), or **Alt+Click** it. The addon scans the market for that item,
+Drag an item into the slot, **right-click** it in your bags, or **Alt+Click** it. Right-click works through
+the game's own auction window, which BargainHouse keeps loaded out of sight for that purpose (switchable in
+Settings). The addon scans the market for that item,
 suggests a price just below the cheapest competitor (flat and/or percentage undercut, configurable),
 and shows stack size, number of stacks, duration, deposit and a warning if you're pricing below vendor
 value. Clicking any row in the market list matches that price.
@@ -273,6 +275,7 @@ Both characters must be on the **same realm and faction**.
 | `/bh reset` | Reset window position and scale |
 | `/bh guild` | Show what is recorded from your guild bank |
 | `/bh autobuy` | Re-enable automatic buying after a server block |
+| `/bh diag` | Show why right-click selling isn't working |
 | `/bh clearprices` | Wipe recorded price history |
 
 Sync is managed entirely in the **Sync** tab.

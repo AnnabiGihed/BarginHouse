@@ -179,6 +179,21 @@ local function WeightedMedian(list)
   return list[#list] and list[#list][1] or 0, total
 end
 
+-- Replaces what we know about one item with a fresh look at the auction house
+-- (used right after buying, so the list shows what is actually left).
+function FS:ReplaceItem(id, name, auctions)
+  if not self.groups then return end
+  local g = self.groups[id]
+  if not g then
+    if #auctions == 0 then return end
+    g = { id = id, name = name, link = auctions[1].link, texture = auctions[1].texture,
+          quality = auctions[1].quality, auctions = {} }
+    self.groups[id] = g
+  end
+  g.auctions = auctions
+  if #auctions == 0 then self.groups[id] = nil end
+end
+
 -- Builds self.groups (per item) and, when record is true, stores today's summary
 function FS:Aggregate(record)
   local groups = {}
