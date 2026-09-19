@@ -9,7 +9,7 @@ replaces Blizzard's auction window with a faster one built around three question
 Everything works on a stock 3.3.5a client. No libraries, no dependencies.
 
 - **Game version:** 3.3.5a (WotLK) - it will **not** work on Classic, Cataclysm or retail clients
-- **Addon version:** 1.0.0
+- **Addon version:** 1.1.1 (see [CHANGELOG.md](CHANGELOG.md))
 - **Author:** Anguish
 - **License:** free to use in game; no modification, reuse or redistribution (see [LICENSE](LICENSE))
 
@@ -71,7 +71,7 @@ addon-message APIs this addon is built on, so it only runs on 3.3.5a.
 
 1. Copy the **BargainHouse** folder from this repository into your AddOns folder, so the path is:
    `World of Warcraft\Interface\AddOns\BargainHouse\BargainHouse.toc`
-   (this README and the license sit beside that folder in the repository, not inside it)
+   (this README, the changelog and the license sit beside that folder in the repository, not inside it)
 2. Restart the game (or `/reload`) and enable **BargainHouse** on the character select screen.
 3. Talk to any auctioneer: BargainHouse opens instead of the default window.
 
@@ -115,7 +115,8 @@ Settings behind the gear button. Away from an auctioneer only the tabs that work
 - **Quantity to buy**: type the amount you need. The addon highlights the cheapest combination of stacks,
   shows the total, and buys them all. If stack sizes make a slightly larger purchase cheaper, the extra is
   shown in orange (this can be turned off in Settings).
-- **Favourites and history** for searches you repeat.
+- **Favourites and history** for searches you repeat. The whole search row (mode, category, rarity, level
+  range, price and checkboxes) is remembered between sessions.
 
 ### Shopping
 
@@ -156,6 +157,8 @@ to skip it, right-click to open it in Browse, then **Buy everything**.
   *Medium*, *Low* (hidden by default).
 - **Deal types**: *Resell* (well below market value, profit counts the 5% cut; the deposit is refunded when
   an item sells so it isn't counted) and *Vendor* (cheaper than a vendor pays, guaranteed profit).
+- Columns show the offers, quantity, total cost, **what you pay per item**, what you would sell each for,
+  profit and return %.
 - Filters for minimum profit, minimum return %, maximum spend per item, confidence and type, plus a
   **search box**. Select rows and **Buy selected**.
 
@@ -172,7 +175,8 @@ Checking only runs when nothing else is scanning or buying, so it never interfer
 
 ### Sell
 
-Drag an item into the slot or **Alt+Click** it in your bags. The addon scans the market for that item,
+Drag an item into the slot, **right-click** it in your bags (while you are at an auctioneer; can be turned
+off in Settings), or **Alt+Click** it. The addon scans the market for that item,
 suggests a price just below the cheapest competitor (flat and/or percentage undercut, configurable),
 and shows stack size, number of stacks, duration, deposit and a warning if you're pricing below vendor
 value. Clicking any row in the market list matches that price.

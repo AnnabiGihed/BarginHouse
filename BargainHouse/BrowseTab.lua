@@ -71,6 +71,7 @@ function B:Create(parent)
 
   local mode = ns.Dropdown(f, 118, 26, function(v)
     ns.db.searchMode = v
+    B:SaveFilters()
     B:UpdateFavButton()
   end)
   mode:SetPoint("LEFT", search, "RIGHT", 6, 0)
@@ -79,7 +80,7 @@ function B:Create(parent)
   mode.tooltip = "How the name is matched.\nWildcard: * = anything, ? = one character (e.g. frost*cloth)"
   self.mode = mode
 
-  local cat = ns.Dropdown(f, 132, 26, function() B:UpdateSubclasses() end)
+  local cat = ns.Dropdown(f, 132, 26, function() B:UpdateSubclasses() B:SaveFilters() end)
   cat:SetPoint("LEFT", mode, "RIGHT", 6, 0)
   local catItems = { { value = 0, text = "All categories" } }
   for i, name in ipairs({ GetAuctionItemClasses() }) do
@@ -89,7 +90,7 @@ function B:Create(parent)
   cat:SetValue(0, true)
   self.cat = cat
 
-  local sub = ns.Dropdown(f, 132, 26)
+  local sub = ns.Dropdown(f, 132, 26, function() B:SaveFilters() end)
   sub:SetPoint("LEFT", cat, "RIGHT", 6, 0)
   self.sub = sub
   self:UpdateSubclasses()
@@ -127,10 +128,12 @@ function B:Create(parent)
   local dash = ns.Text(f, "BHFontSmall", "-")
   dash:SetPoint("LEFT", minL, "RIGHT", 3, 0)
   minL.onEnter, maxL.onEnter = search.onEnter, search.onEnter
+  minL.onChange = function() B:SaveFilters() end
+  maxL.onChange = function() B:SaveFilters() end
   minL.nextBox, maxL.nextBox = maxL, search
   self.minL, self.maxL = minL, maxL
 
-  local rarity = ns.Dropdown(f, 112, 22)
+  local rarity = ns.Dropdown(f, 112, 22, function() B:SaveFilters() end)
   rarity:SetPoint("LEFT", maxL, "RIGHT", 12, 0)
   local rItems = { { value = -1, text = "Any rarity" } }
   for q = 0, 5 do
@@ -142,11 +145,11 @@ function B:Create(parent)
 
   local maxLabel = ns.Text(f, "BHFontSmall", "Max / unit")
   maxLabel:SetPoint("LEFT", rarity, "RIGHT", 12, 0)
-  local maxPrice = ns.MoneyInput(f, function() B:BuildGroups() end)
+  local maxPrice = ns.MoneyInput(f, function() B:BuildGroups() B:SaveFilters() end)
   maxPrice:SetPoint("LEFT", maxLabel, "RIGHT", 6, 0)
   self.maxPrice = maxPrice
 
-  local usable = ns.Check(f, "Usable")
+  local usable = ns.Check(f, "Usable", function() B:SaveFilters() end)
   usable:SetPoint("LEFT", maxPrice, "RIGHT", 14, 0)
   usable.tooltip = "Only items your character can use (applies on next search)"
   self.usable = usable
@@ -154,11 +157,13 @@ function B:Create(parent)
   local hideBid = ns.Check(f, "Hide bid-only", function(_, on)
     ns.db.hideBidOnly = on
     B:BuildGroups()
+    B:SaveFilters()
   end)
   hideBid:SetPoint("LEFT", usable.label, "RIGHT", 14, 0)
   hideBid:SetChecked(ns.db.hideBidOnly)
+  self.hideBid = hideBid
 
-  local deals = ns.Check(f, "Deals only", function() B:BuildGroups() end)
+  local deals = ns.Check(f, "Deals only", function() B:BuildGroups() B:SaveFilters() end)
   deals:SetPoint("LEFT", hideBid.label, "RIGHT", 14, 0)
   deals.tooltip = "Only show items currently listed below their recorded average price"
   self.deals = deals
@@ -328,17 +333,57 @@ function B:Create(parent)
   end)
   self.bidBtn = bid
 
-  f:SetScript("OnShow", function() B:Replan() end)
+  f:SetScript("OnShow", function()
+    B:LoadFilters()
+    B:Replan()
+  end)
   f:SetScript("OnHide", function()
     B:Disarm()
     if B.queue then B:QueueStop("Stopped (tab closed).") end
   end)
 
+  self:LoadFilters()
   self:UpdateFavButton()
   self:UpdateBuyBar()
   groups:SetData(self.groups)
   auctions:SetData({})
   return f
+end
+
+-- the search row is remembered between sessions
+function B:SaveFilters()
+  if self.loadingFilters or not self.mode then return end
+  ns.db.browse = {
+    mode = self.mode.value,
+    cat = self.cat.value,
+    sub = self.sub.value,
+    rarity = self.rarity.value,
+    minLevel = self.minL:GetText(),
+    maxLevel = self.maxL:GetText(),
+    usable = self.usable:GetChecked() and true or false,
+    deals = self.deals:GetChecked() and true or false,
+    maxPrice = self.maxPrice:GetCopper(),
+  }
+  ns.db.searchMode = self.mode.value
+end
+
+function B:LoadFilters()
+  if not self.mode then return end
+  local f = ns.db.browse or {}
+  self.loadingFilters = true
+  self.mode:SetValue(f.mode or ns.db.searchMode or "CONTAINS", true)
+  self.cat:SetValue(f.cat or 0, true)
+  self:UpdateSubclasses()
+  if f.sub and f.sub > 0 then self.sub:SetValue(f.sub, true) end
+  self.rarity:SetValue(f.rarity or -1, true)
+  self.minL:SetTextSilent(f.minLevel or "")
+  self.maxL:SetTextSilent(f.maxLevel or "")
+  self.usable:SetChecked(f.usable)
+  self.deals:SetChecked(f.deals)
+  self.hideBid:SetChecked(ns.db.hideBidOnly)
+  self.maxPrice:SetCopper(f.maxPrice or 0)
+  self.loadingFilters = false
+  self:UpdateFavButton()
 end
 
 function B:SetStatus(text)
@@ -811,8 +856,16 @@ function B:PrepareBuy(a)
     if B.locateToken ~= token or B.selAuction ~= a then return end
     B.buyState = "READY"
     B:UpdateBuyBar()
-  end, function()
+  end, function(interrupted)
     if B.locateToken ~= token or B.selAuction ~= a then return end
+    if interrupted then
+      -- another scan interrupted us: try again in a moment
+      B.buyState = nil
+      ns.After(1.5, function()
+        if B.locateToken == token and B.selAuction == a and not B.scanning then B:PrepareBuy(a) end
+      end)
+      return
+    end
     B.buyState = "NOTFOUND"
     B:SetStatus("That offer was already sold or expired.")
     B:RemoveAuction(a)

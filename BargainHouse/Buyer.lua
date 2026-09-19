@@ -31,7 +31,10 @@ function ns.Locate(a, params, onFound, onGone)
         end
       end,
       onDone = function(aborted)
-        if aborted then return end
+        if aborted then
+          onGone(true) -- interrupted by another scan: the caller retries
+          return
+        end
         if found then onFound() else NextAttempt() end
       end,
     })
@@ -234,8 +237,17 @@ function Queue:Next()
     else
       self:Bid(item)
     end
-  end, function()
+  end, function(interrupted)
     if not self.active then return end
+    if interrupted then
+      -- another scan took over the auction house: try this offer again shortly
+      item.locateFails = (item.locateFails or 0) + 1
+      if item.locateFails <= 5 then
+        self.i = self.i - 1
+        ns.After(1, function() self:Next() end)
+        return
+      end
+    end
     self.gone = self.gone + 1
     self:MarkHandled(item)
     self:Call("onGone", item)

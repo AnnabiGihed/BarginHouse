@@ -1,7 +1,8 @@
 local ADDON, ns = ...
 _G.BargainHouse = ns
 
-ns.VERSION = "1.0.0"
+-- the version lives in BargainHouse.toc; read it back so it can't drift
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "?"
 ns.ACCENT = "|cff33d999"
 ns.TIME_LEFT = { "<30m", "<2h", "<12h", "48h" }
 
@@ -11,6 +12,8 @@ ns.DEFAULTS = {
   replaceBlizzard = true,
   tooltipPrices = true,
   searchMode = "CONTAINS",
+  browse = {},         -- the Browse search row, remembered between sessions
+  rightClickSell = true, -- right-click a bag item at an auctioneer to sell it
   maxPages = 25,
   hideBidOnly = false,
   undercut = 1,        -- copper
@@ -322,6 +325,32 @@ function ns.FindInList(a)
   end
 end
 
+-- Can this bag item go on the auction house? (soulbound, quest and conjured
+-- items can't, and using them by accident would be worse than not helping)
+local scanner
+function ns.CanAuction(bag, slot)
+  if not GetContainerItemLink(bag, slot) then return false end
+  if not scanner then
+    scanner = CreateFrame("GameTooltip", "BargainHouseScanTooltip", UIParent, "GameTooltipTemplate")
+    scanner:SetOwner(UIParent, "ANCHOR_NONE")
+  end
+  scanner:ClearLines()
+  local ok = pcall(scanner.SetBagItem, scanner, bag, slot)
+  if not ok then return false end
+  for i = 2, math.min(scanner:NumLines(), 6) do
+    local line = _G["BargainHouseScanTooltipTextLeft" .. i]
+    local text = line and line:GetText()
+    if text then
+      if (ITEM_SOULBOUND and text == ITEM_SOULBOUND)
+        or (ITEM_BIND_QUEST and text == ITEM_BIND_QUEST)
+        or (ITEM_CONJURED and text == ITEM_CONJURED) then
+        return false
+      end
+    end
+  end
+  return true
+end
+
 ---------------------------------------------------------------------------
 -- Price database
 ---------------------------------------------------------------------------
@@ -400,6 +429,40 @@ end
 ---------------------------------------------------------------------------
 -- Auction house replacement
 ---------------------------------------------------------------------------
+-- Right-click a bag item to put it in the Sell slot. The game's own bag click
+-- function has to be taken over for that, which "taints" it, so this is only
+-- installed while you are at an auctioneer and removed again straight after:
+-- outside the auction house every click runs through Blizzard's untouched code.
+local originalBagClick
+function ns.InstallBagClick()
+  if originalBagClick or not ContainerFrameItemButton_OnClick then return end
+  if ns.db.rightClickSell == false then return end
+  originalBagClick = ContainerFrameItemButton_OnClick
+  ContainerFrameItemButton_OnClick = function(button, mouse)
+    if mouse == "RightButton" and ns.atAH and ns.main and ns.main:IsShown()
+      and not IsModifiedClick() and not CursorHasItem() then
+      local parent = button and button.GetParent and button:GetParent()
+      local bag = parent and parent.GetID and parent:GetID()
+      local slot = button and button.GetID and button:GetID()
+      if bag and slot then
+        if ns.CanAuction(bag, slot) then
+          ns.Sell:SetItemFromBag(bag, slot)
+        else
+          ns.Print("That item can't be put on the auction house.")
+        end
+        return -- never fall through: using the item here would be blocked anyway
+      end
+    end
+    return originalBagClick(button, mouse)
+  end
+end
+
+function ns.RemoveBagClick()
+  if not originalBagClick then return end
+  ContainerFrameItemButton_OnClick = originalBagClick
+  originalBagClick = nil
+end
+
 function ns.ApplyReplace()
   if ns.db.replaceBlizzard then
     UIParent:UnregisterEvent("AUCTION_HOUSE_SHOW")
@@ -482,10 +545,12 @@ ev:SetScript("OnEvent", function(self, event, arg1)
 
   elseif event == "AUCTION_HOUSE_SHOW" then
     ns.atAH = true
+    ns.InstallBagClick()
     if ns.db.replaceBlizzard then ns.OpenMain() end
 
   elseif event == "AUCTION_HOUSE_CLOSED" then
     ns.atAH = false
+    ns.RemoveBagClick()
     ns.Scanner:Stop()
     ns.HideMainSilently()
   end

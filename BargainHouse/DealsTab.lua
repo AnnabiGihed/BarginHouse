@@ -116,6 +116,7 @@ function D:Create(parent)
     { text = "Offers", w = 40, key = "offersN", j = "RIGHT" },
     { text = "Qty", w = 40, key = "qty", j = "RIGHT" },
     { text = "Cost", w = 100, key = "cost", j = "RIGHT" },
+    { text = "Buy each", w = 92, key = "buyUnit", j = "RIGHT" },
     { text = "Sell each", w = 94, key = "sellUnit", j = "RIGHT" },
     { text = "Profit", w = 100, key = "profit", j = "RIGHT" },
     { text = "Return", w = 48, key = "roi", j = "RIGHT" },
@@ -140,10 +141,11 @@ function D:Create(parent)
     r.cols[3]:SetText(#d.offers)
     r.cols[4]:SetText(d.qty)
     r.cols[5]:SetText(ns.MoneyShort(d.cost))
-    r.cols[6]:SetText(ns.MoneyShort(d.sellUnit))
-    r.cols[7]:SetText("|cff66dd88+|r" .. ns.MoneyShort(d.profit))
-    r.cols[8]:SetText(d.roi .. "%")
-    r.cols[9]:SetText(ns.CONFIDENCE_TEXT[d.confidence])
+    r.cols[6]:SetText(ns.MoneyShort(d.buyUnit))
+    r.cols[7]:SetText(ns.MoneyShort(d.sellUnit))
+    r.cols[8]:SetText("|cff66dd88+|r" .. ns.MoneyShort(d.profit))
+    r.cols[9]:SetText(d.roi .. "%")
+    r.cols[10]:SetText(ns.CONFIDENCE_TEXT[d.confidence])
   end
   list.onClick = function(d, button)
     if button == "RightButton" then
@@ -177,6 +179,7 @@ function D:Create(parent)
       if i > 10 then GameTooltip:AddLine(format("   ... %d more", #d.offers - 10), 0.7, 0.7, 0.7) break end
       GameTooltip:AddDoubleLine(format("   %dx  %s", a.count, a.owner or "?"), ns.Money(a.unit) .. " each", 0.9, 0.9, 0.9, 1, 1, 1)
     end
+    GameTooltip:AddDoubleLine("You pay on average", ns.Money(d.buyUnit or 0) .. " each", 0.8, 0.8, 0.8, 1, 1, 1)
     GameTooltip:AddDoubleLine("Listed on the AH", d.listed, 0.7, 0.7, 0.7, 1, 1, 1)
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(ns.ACCENT .. "Click|r select   " .. ns.ACCENT .. "Right-click|r open in Browse", 0.8, 0.8, 0.8)
@@ -302,9 +305,17 @@ function D:StartScan()
     end)
 end
 
+-- what is selected right now, so a refresh can tell whether anything changed
+function D:SelectionKey()
+  local parts = {}
+  for d in pairs(self.selected) do parts[#parts + 1] = format("%s:%d:%d", d.name, d.cost, #d.offers) end
+  table.sort(parts)
+  return table.concat(parts, "|")
+end
+
 function D:Refresh()
   if not self.list then return end
-  self:Disarm()
+  local before = self:SelectionKey()
   local keep = {}
   for d in pairs(self.selected) do keep[d.id] = true end
   wipe(self.selected)
@@ -314,11 +325,16 @@ function D:Refresh()
   end
   for _, d in ipairs(self.deals) do
     d.offersN = #d.offers
+    d.buyUnit = d.qty > 0 and (d.cost / d.qty) or 0
     if keep[d.id] then self.selected[d] = true end
   end
   self:Sort()
   self:UpdateBar()
-  self:ScheduleArm()
+  -- don't disturb a purchase that is already being prepared or running
+  if self:SelectionKey() ~= before or not self.queue then
+    self:Disarm()
+    self:ScheduleArm()
+  end
 end
 
 function D:Sort()
