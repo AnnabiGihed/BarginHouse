@@ -2,6 +2,38 @@
 
 All notable changes to BargainHouse. Versions follow `major.minor.patch`.
 
+## 1.7.1
+
+### Fixed - the watchlist now judges finds the same way
+
+- **A watched item added by name could never produce a hit on its first check.** The threshold was worked
+  out before the scan told the addon which item it was, so an item with no "alert under" price was compared
+  against nothing. It is identified first now.
+- **Watch hits assumed you sell at market value.** Like deals, the sale price is capped by the cheapest
+  listing you did not buy, and the tooltip names it.
+- **Every watch hit claimed High confidence.** It now rates its finds from the same history as deals, so an
+  item with two listings a day reads Low instead of pretending to be a sure thing.
+- Watch hits also inherit the corrected valuation from 1.7.0, so a "deal" is measured against what the item
+  really trades at rather than the overpriced listings.
+
+## 1.7.0
+
+### Fixed - deals were finding bargains that weren't
+
+- **Prices followed the overpriced listings.** An item's value was the median of every asking price, so a
+  wall of hopeful sellers dragged it up and ordinary listings looked like bargains. In testing, Saronite Bar
+  trading at about 21g was valued at 69g - more than three times too high. Value is now taken a quarter of
+  the way up the listings by quantity, which ignores the wall without following a single bargain, and is
+  still the middle day of up to seven days so one odd day can't move it.
+- **Resale assumed you sell at market value.** After buying the cheapest offers you have to undercut
+  whatever is left, which can be well below market. The sale price is now capped by the cheapest listing you
+  did not buy, and the tooltip names it.
+- **Nothing checked whether the item sells.** A cheap stack of something nobody buys looked like profit. A
+  resale deal is now limited to about half of what is normally listed in a day, and says when offers were
+  left out for that reason.
+- **Thin data could look trustworthy.** Two listings produced a "median" and could reach Medium confidence.
+  Fewer than three listings is always Low; High needs several days and at least eight listings.
+
 ## 1.6.0
 
 ### Fixed

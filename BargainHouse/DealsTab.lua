@@ -186,6 +186,15 @@ function D:Create(parent)
       GameTooltip:AddDoubleLine(format("   %dx  %s", a.count, a.owner or "?"), ns.Money(a.unit) .. " each", 0.9, 0.9, 0.9, 1, 1, 1)
     end
     GameTooltip:AddDoubleLine("You pay on average", ns.Money(d.buyUnit or 0) .. " each", 0.8, 0.8, 0.8, 1, 1, 1)
+    if d.undercutting then
+      GameTooltip:AddDoubleLine("You must undercut", ns.Money(d.undercutting), 0.8, 0.8, 0.8, 1, 1, 1)
+    end
+    if d.dailyQty and d.dailyQty > 0 then
+      GameTooltip:AddDoubleLine("Normally on sale per day", d.dailyQty, 0.8, 0.8, 0.8, 1, 1, 1)
+    end
+    if d.limitedByMarket then
+      GameTooltip:AddLine("Cheaper offers were left out: more than this would sit unsold.", 0.9, 0.8, 0.5, true)
+    end
     GameTooltip:AddDoubleLine("Listed on the AH", d.listed, 0.7, 0.7, 0.7, 1, 1, 1)
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(ns.ACCENT .. "Click|r select   " .. ns.ACCENT .. "Right-click|r open in Browse", 0.8, 0.8, 0.8)

@@ -165,6 +165,16 @@ function W:Evaluate(item, auctions)
   item.checked = time()
   item.listed = #auctions
   local me = ns.Me()
+  -- learn what the item is first: an item added by name has no id yet, and
+  -- without it the market-value threshold could not be worked out at all
+  if auctions[1] then
+    item.link = item.link or auctions[1].link
+    item.id = item.id or auctions[1].id or ns.ItemID(auctions[1].link)
+    item.texture = auctions[1].texture
+    item.quality = auctions[1].quality
+    item.name = auctions[1].name
+  end
+
   local offers, best = {}, nil
   local limit, why = self:Threshold(item)
   for _, a in ipairs(auctions) do
@@ -174,13 +184,6 @@ function W:Evaluate(item, auctions)
     end
   end
   item.best = best
-  if auctions[1] then
-    item.link = item.link or auctions[1].link
-    item.id = item.id or auctions[1].id
-    item.texture = auctions[1].texture
-    item.quality = auctions[1].quality
-    item.name = auctions[1].name
-  end
   table.sort(offers, function(a, b) return a.unit < b.unit end)
 
   if #offers == 0 then
@@ -197,8 +200,13 @@ function W:Evaluate(item, auctions)
     qty = qty + a.count
     cost = cost + a.buyout
   end
+  -- the cheapest offer we are NOT taking: that is who you would have to undercut
+  local rival
+  for _, a in ipairs(auctions) do
+    if a.unit and a.owner ~= me and a.unit > limit and (not rival or a.unit < rival) then rival = a.unit end
+  end
   item.hit = { offers = offers, qty = qty, cost = cost, unit = offers[1].unit, limit = limit, t = time(),
-               params = { name = item.name } }
+               rival = rival, params = { name = item.name } }
 
   local key = format("%s:%d:%d", item.name, floor(offers[1].unit), qty)
   self.alerted = self.alerted or {}
@@ -220,11 +228,21 @@ function W:Deals()
   for _, item in ipairs(self:List()) do
     local hit = item.hit
     if hit and #hit.offers > 0 then
-      local value = item.id and ns.MarketValue(item.id)
+      local value, days, listings, dailyQty = nil, 0, 0, 0
+      if item.id then value, days, listings, dailyQty = ns.MarketValue(item.id) end
       local sellUnit = value and value * 0.95 or (hit.limit or hit.unit)
+      -- you cannot sell above the cheapest listing you left behind
+      local undercutting
+      if hit.rival then
+        local capped = hit.rival * 0.95
+        if capped < sellUnit then sellUnit, undercutting = capped, hit.rival end
+      end
+      -- and its price is only as trustworthy as the history behind it
+      local conf = (value and ns.DealConfidence) and ns.DealConfidence(days, listings) or 1
       local d = { id = item.id, name = item.name, link = item.link, texture = item.texture, quality = item.quality,
                   kind = "watch", offers = hit.offers, qty = hit.qty, cost = hit.cost, value = value,
-                  sellUnit = sellUnit, confidence = 3, days = 0, listed = item.listed or #hit.offers,
+                  undercutting = undercutting, dailyQty = dailyQty,
+                  sellUnit = sellUnit, confidence = conf, days = days, listed = item.listed or #hit.offers,
                   params = hit.params, watch = item }
       d.revenue = floor(sellUnit * d.qty)
       d.profit = d.revenue - d.cost

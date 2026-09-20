@@ -9,7 +9,7 @@ replaces Blizzard's auction window with a faster one built around three question
 Everything works on a stock 3.3.5a client. No libraries, no dependencies.
 
 - **Game version:** 3.3.5a (WotLK) - it will **not** work on Classic, Cataclysm or retail clients
-- **Addon version:** 1.6.0 (see [CHANGELOG.md](CHANGELOG.md))
+- **Addon version:** 1.7.1 (see [CHANGELOG.md](CHANGELOG.md))
 - **Author:** Anguish
 - **License:** free to use in game; no modification, reuse or redistribution (see [LICENSE](LICENSE))
 
@@ -174,8 +174,12 @@ yellow has an estimated skill threshold; opening that profession window once cor
 
 - **Scan whole AH**: *Fast* downloads everything in one request (the server allows this every 15 minutes)
   or *Page by page*, which is slower but always available and is used automatically as a fallback.
-- Each scan stores a **daily price summary per item** for 7 days. An item's market value is the median of
-  those days, so a single odd day doesn't distort it. Confidence: *High* (3+ days, 5+ listings),
+- Each scan stores a **daily price summary per item** for 7 days. An item's value is taken a quarter of the
+  way up the listings by quantity - the cheap end is what actually changes hands, while the top of the list
+  is whatever sellers hope for - and then the middle of those days, so one odd day can't move it.
+- A resale deal is judged on what you could really get: the sale price is capped by the cheapest listing you
+  did **not** buy, since that is who you must undercut, and the quantity is capped at about half of what is
+  normally on sale in a day, so you aren't left holding stock nobody buys. Confidence: *High* (3+ days, 5+ listings),
   *Medium*, *Low* (hidden by default).
 - **Deal types**: *Resell* (well below market value, profit counts the 5% cut; the deposit is refunded when
   an item sells so it isn't counted) and *Vendor* (cheaper than a vendor pays, guaranteed profit).
@@ -188,6 +192,9 @@ yellow has an estimated skill threshold; opening that profession window once cor
 
 Inside Deals. Add items by name or shift-click, with an optional **Alert under** price (without one, the
 item's market value is used, 20% below counts as a deal).
+
+Watch hits are judged exactly like deals: measured against what the item really trades at, with the sale
+price capped by the cheapest listing you did not buy, and confidence rated from the history behind it.
 
 While the auction house is open, one watched item is re-checked per interval (**Check every**: 5s to 5min).
 **Check now** (next to the Watchlist button) checks every watched item immediately instead of waiting.
@@ -271,6 +278,14 @@ accounts while characters are online. Nothing is shared with anyone else.
 2. On that account, click **Accept** in the popup.
 3. Repeat for each further account, from any already-linked account, in any order.
    Linked accounts exchange their links, so every account ends up connected to every other.
+
+**What is shared, and how to force it**
+
+Scans travel as **market prices plus deal candidates**, not every auction on the house: enough for the Deals
+and Level up tabs to work on another account, while Browse still searches live. The exchange happens by
+itself when one account's scan is clearly newer; **Get their scan** in the Sync tab asks every connected
+account for its latest one right away. `/bh diag` shows your own scan's age, your realm and faction key, and
+for each linked account whether it is connected and how old its scan is.
 
 **How it behaves**
 

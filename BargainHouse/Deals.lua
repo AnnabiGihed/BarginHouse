@@ -9,6 +9,10 @@ local format, floor = string.format, math.floor
 local HISTORY_DAYS = 7
 local FORGET_DAYS = 21
 local AH_CUT = 0.05
+-- how far up the listings the realistic price sits (a quarter of the quantity)
+local FAIR_SHARE = 0.25
+-- don't plan to flip more than this share of what is normally on sale in a day
+local LIQUIDITY_SHARE = 0.5
 local GETALL_COOLDOWN = 15 * 60
 local READ_PER_FRAME = 400
 
@@ -167,6 +171,21 @@ end
 ---------------------------------------------------------------------------
 -- Market history
 ---------------------------------------------------------------------------
+-- Quantity-weighted price at a given share of the listings: Quantile(list, 0.5)
+-- is the median, Quantile(list, 0.25) the price a quarter of the way up.
+local function Quantile(list, share)
+  table.sort(list, function(a, b) return a[1] < b[1] end)
+  local total = 0
+  for _, x in ipairs(list) do total = total + x[2] end
+  if total == 0 then return list[1] and list[1][1] or 0, 0 end
+  local mark, acc = total * share, 0
+  for _, x in ipairs(list) do
+    acc = acc + x[2]
+    if acc >= mark then return x[1], total end
+  end
+  return list[#list][1], total
+end
+
 local function WeightedMedian(list)
   table.sort(list, function(a, b) return a[1] < b[1] end)
   local total = 0
@@ -225,14 +244,19 @@ function FS:Aggregate(record)
     g.count = count
     if count > 0 then
       local med, qty = WeightedMedian(prices)
-      g.median, g.low, g.qty = med, low, qty
+      -- What the item really changes hands at is near the cheap end: the top of
+      -- the list is whatever sellers hope for. We take the price a quarter of
+      -- the way up the listings, which ignores the overpriced wall without
+      -- being dragged down by a single bargain.
+      local fair = Quantile(prices, FAIR_SHARE)
+      g.median, g.low, g.qty, g.fair = med, low, qty, fair
       if record then
         ns.RecordPrice(id, low)
         local m = book[id] or { h = {} }
         book[id] = m
         m.n, m.q = g.name, g.quality
         local h = m.h
-        local entry = { today, floor(med), floor(low), qty, count }
+        local entry = { today, floor(med), floor(low), qty, count, floor(fair) }
         if h[#h] and h[#h][1] == today then h[#h] = entry else h[#h + 1] = entry end
         while #h > HISTORY_DAYS do table.remove(h, 1) end
       end
@@ -249,19 +273,25 @@ function FS:Aggregate(record)
 end
 
 -- Market value per unit: median of the daily medians. Returns value, days, avgListings
+-- What the item is really worth: the middle day of the fair prices we have
+-- recorded, so one odd day can't move it. Returns value, days, listings/day and
+-- the typical quantity on sale per day.
 function ns.MarketValue(id)
   local book = ns.db.market and ns.db.market[Key()]
   local m = book and book[id]
-  if not m or #m.h == 0 then return nil, 0, 0 end
-  local meds, listings = {}, 0
+  if not m or #m.h == 0 then return nil, 0, 0, 0 end
+  local fair, listings, qtys = {}, 0, {}
   for _, d in ipairs(m.h) do
-    meds[#meds + 1] = d[2]
+    fair[#fair + 1] = d[6] or d[2]          -- older records only kept the median
     listings = listings + (d[5] or 0)
+    qtys[#qtys + 1] = d[4] or 0
   end
-  table.sort(meds)
-  local k = #meds
-  local value = (k % 2 == 1) and meds[(k + 1) / 2] or floor((meds[k / 2] + meds[k / 2 + 1]) / 2)
-  return value, k, listings / k
+  table.sort(fair)
+  table.sort(qtys)
+  local k = #fair
+  local value = (k % 2 == 1) and fair[(k + 1) / 2] or floor((fair[k / 2] + fair[k / 2 + 1]) / 2)
+  local qty = qtys[math.ceil(k / 2)] or 0
+  return value, k, listings / k, qty
 end
 
 ---------------------------------------------------------------------------
@@ -269,12 +299,16 @@ end
 -- opts: minProfit (copper), minROI (percent), maxSpend (copper, 0 = any),
 --       minConfidence (1..3), kind ("all"/"resell"/"vendor")
 ---------------------------------------------------------------------------
+-- How much the price is worth trusting. A price from one day, or from a handful
+-- of listings, is a guess: two listings have a "median" too.
 local function Confidence(days, listings)
-  if days >= 3 and listings >= 5 then return 3 end
-  if days >= 2 or listings >= 8 then return 2 end
+  if listings < 3 then return 1 end                     -- two listings have a "median" too
+  if days >= 3 and listings >= 8 then return 3 end      -- several days, a real market
+  if (days >= 2 and listings >= 5) or listings >= 15 then return 2 end
   return 1
 end
 ns.CONFIDENCE_TEXT = { "|cffff8866Low|r", "|cffffd100Medium|r", "|cff66dd88High|r" }
+ns.DealConfidence = Confidence      -- the watchlist rates its finds the same way
 
 function FS:Deals(opts)
   local deals = {}
@@ -290,26 +324,51 @@ function FS:Deals(opts)
     if #offers > 0 then
       table.sort(offers, function(a, b) return a.unit < b.unit end)
       local _, _, _, _, _, _, _, _, _, _, vendor = GetItemInfo(g.link)
-      local value, days, listings = ns.MarketValue(id)
+      local value, days, listings, dailyQty = ns.MarketValue(id)
 
       local function Build(kind, sellUnit, conf)
         -- buy every offer that still makes the required return when resold at sellUnit
         local limit = sellUnit / (1 + roi)
         local d = { id = id, name = g.name, link = g.link, texture = g.texture, quality = g.quality, kind = kind,
                     offers = {}, qty = 0, cost = 0, value = value, sellUnit = sellUnit, confidence = conf,
-                    days = days, listed = #g.auctions }
-        for _, a in ipairs(offers) do
+                    days = days, listed = #g.auctions, dailyQty = dailyQty }
+        -- Don't plan to flip more than the market swallows in a day. Without
+        -- this a single cheap stack of something nobody buys looks like profit.
+        local cap = (kind == "resell" and dailyQty and dailyQty > 0)
+          and math.max(1, floor(dailyQty * LIQUIDITY_SHARE)) or nil
+        for i, a in ipairs(offers) do
           if a.unit > limit then break end
           if opts.maxSpend and opts.maxSpend > 0 and d.cost + a.buyout > opts.maxSpend then break end
+          if cap and d.qty + a.count > cap then
+            d.limitedByMarket = true
+            break
+          end
           d.offers[#d.offers + 1] = a
           d.qty = d.qty + a.count
           d.cost = d.cost + a.buyout
+          d.nextOffer = offers[i + 1]        -- who you would have to undercut
         end
         if #d.offers == 0 then return nil end
+
+        if kind == "resell" then
+          -- You cannot sell at the market price while a cheaper listing is still
+          -- there: you have to undercut whatever is left after your purchase.
+          local rival = d.nextOffer and d.nextOffer.unit
+          if rival then
+            local realistic = math.min(sellUnit, rival * (1 - AH_CUT))
+            if realistic < sellUnit then
+              d.sellUnit = realistic
+              d.undercutting = rival
+            end
+          end
+          sellUnit = d.sellUnit
+        end
+
         d.revenue = floor(sellUnit * d.qty)
         d.profit = d.revenue - d.cost
         d.roi = d.cost > 0 and floor(d.profit / d.cost * 100) or 0
         if d.profit < (opts.minProfit or 0) then return nil end
+        if opts.minROI and opts.minROI > 0 and d.roi < opts.minROI then return nil end
         return d
       end
 
