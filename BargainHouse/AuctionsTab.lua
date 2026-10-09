@@ -3,6 +3,28 @@ local C = ns.C
 local format = string.format
 
 local A = { data = {} }
+
+-- Tell you once per visit when your auctions have been undercut: otherwise you
+-- only find out by opening this tab and looking.
+function A:WarnUndercut(data)
+  local count, worst, worstName = 0, nil, nil
+  for _, a in ipairs(data) do
+    if not a.sold and a.low and a.unit and a.low < a.unit then
+      count = count + 1
+      local gap = a.unit - a.low
+      if not worst or gap > worst then worst, worstName = gap, a.name end
+    end
+  end
+  self.undercutCount = count
+  if count == 0 then
+    self.warnedAt = nil
+    return
+  end
+  if self.warnedAt and GetTime() - self.warnedAt < 600 then return end
+  self.warnedAt = GetTime()
+  ns.Print(format("|cffff6655%d of your auction%s undercut|r (worst: %s by %s). Check the Auctions tab.",
+    count, count == 1 and " is" or "s are", worstName or "?", ns.Money(worst or 0)))
+end
 ns.Auctions = A
 
 StaticPopupDialogs["BARGAINHOUSE_CANCEL"] = {
@@ -148,6 +170,7 @@ function A:Read()
     end
   end
   self.data = data
+  self:WarnUndercut(data)
   self.summary:SetText(format("%d active  (buyout value %s)     %d sold  (%s incoming)",
     active, ns.Money(value, true), sold, ns.Money(soldValue, true)))
 

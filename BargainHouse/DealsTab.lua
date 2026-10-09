@@ -475,9 +475,14 @@ function D:BuyAll(armOnly)
   local q = ns.NewBuyQueue(list, {
     onUpdate = function() D:UpdateBar() end,
     onStarted = function() D:UpdateBar() end,
-    onBought = function(_, item)
+    onBought = function(_, item, cost)
       local d = item.deal
       d.bought = (d.bought or 0) + item.a.count
+      if ns.Ledger then
+        -- what we paid, and what the addon said we would get for it
+        ns.Ledger:RecordBuy(d.id, d.name, item.a.count, cost or item.a.buyout or 0,
+                            (d.sellUnit or 0) * item.a.count, d.kind)
+      end
     end,
     onFinish = function(queue) D:BuyFinished(queue) end,
     onStop = function(queue, reason) D:BuyFinished(queue, reason) end,

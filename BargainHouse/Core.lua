@@ -584,6 +584,7 @@ ev:SetScript("OnEvent", function(self, event, arg1)
     end
 
     ns.CreateMinimapButton()
+    ns.BagClickOriginal = ContainerFrameItemButton_OnClick
 
     if ContainerFrameItemButton_OnModifiedClick then
       hooksecurefunc("ContainerFrameItemButton_OnModifiedClick", function(btn, button)
@@ -636,6 +637,28 @@ SlashCmdList.BARGAINHOUSE = function(msg)
     else
       ns.Print("Guild bank: " .. why)
     end
+  elseif msg == "check" then
+    ns.SelfCheck:Print()
+
+  elseif msg == "profit" or msg == "results" then
+    local rows, sum = ns.Ledger:Results()
+    if #rows == 0 then
+      ns.Print("Nothing bought through the Deals tab yet.")
+    else
+      ns.Print(format("Spent %s, taken %s so far: %s%s|r",
+        ns.Money(sum.spent), ns.Money(sum.earned),
+        sum.profit >= 0 and "|cff66dd88+" or "|cffff5555", ns.Money(math.abs(sum.profit))))
+      local hits, total = ns.Ledger:Accuracy()
+      if total > 0 then
+        ns.Print(format("  %d of %d items sold for what the addon predicted or better", hits, total))
+      end
+      for i = 1, math.min(#rows, 8) do
+        local r = rows[i]
+        ns.Print(format("  %-24s bought %d for %s, sold %d for %s", r.name or "?", r.bought,
+          ns.Money(r.cost), r.sold, ns.Money(r.gross)))
+      end
+    end
+
   elseif msg == "diag" then
     ns.Print("Right-click selling:")
     for _, line in ipairs(ns.SellDiagnostics()) do ns.Print(line) end
@@ -666,6 +689,8 @@ SlashCmdList.BARGAINHOUSE = function(msg)
     ns.Print("  /bh reset - reset window position and scale")
     ns.Print("  /bh clearprices - wipe the recorded price history")
     ns.Print("  /bh guild - show what is recorded from your guild bank")
+    ns.Print("  /bh profit - what your deals actually made")
+    ns.Print("  /bh check - make sure the interface built correctly")
     ns.Print("  /bh diag - why right-click selling isn't working")
     ns.Print("  /bh autobuy - switch back to automatic buying after a block")
   end

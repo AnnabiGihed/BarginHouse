@@ -2,6 +2,26 @@
 
 All notable changes to BargainHouse. Versions follow `major.minor.patch`.
 
+## 1.8.0
+
+### Added
+
+- **The addon now learns what actually sells.** Each full scan is compared with the last: an auction that
+  disappears while it still had hours left was bought, one that was already nearly over merely expired. That
+  gives a real sales-per-day figure per item, which now sets how many of something a deal may include -
+  before this it was a guess based on how many were listed.
+- **Realised profit, not predicted profit.** What you pay is recorded when you buy through the Deals tab,
+  and what you receive is recorded when one of your auctions sells. `/bh profit` shows what you spent, what
+  came back, and how often items sold for what the addon predicted or better.
+- **Undercut warning**: when your auctions are read at the auction house, you are told once per visit if any
+  have been undercut, with the worst one named.
+- **The Sell tab is more careful**: it will not chase a lone dumper to the bottom (it undercuts the next
+  listing up and says so), and it warns when your price is below what you paid for the item.
+- **`/bh check`** inspects what the addon actually built in this client: tabs and their pages, lists that
+  would cover the materials panel, lists sharing a frame (and therefore a scroll bar), missing calls between
+  modules, readable profession data, and whether anything has taken over the game's bag clicks. These are
+  exactly the faults the test suite cannot see, and every one of them reached you at some point.
+
 ## 1.7.1
 
 ### Fixed - the watchlist now judges finds the same way

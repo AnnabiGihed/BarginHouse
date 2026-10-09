@@ -387,14 +387,48 @@ function S:LowestOther()
   return low
 end
 
+-- Is the cheapest listing a lone outlier? Someone dumping one stack far below
+-- everyone else is not a price you should chase.
+function S:LoneOutlier()
+  local me = ns.Me()
+  local units = {}
+  for _, e in ipairs(self.entries or {}) do
+    if e.unit and e.owner ~= me then units[#units + 1] = e.unit end
+  end
+  if #units < 4 then return nil end
+  table.sort(units)
+  local second = units[2]
+  if second and units[1] < second * 0.6 then return units[1], second end
+end
+
 function S:Undercut()
   local low = self:LowestOther()
-  if low then
-    local price = low
-    if (ns.db.undercutPct or 0) > 0 then price = price * (1 - ns.db.undercutPct / 100) end
-    self:SetPrice(floor(price) - (ns.db.undercut or 0))
-    return true
+  if not low then return end
+  local price = low
+  if (ns.db.undercutPct or 0) > 0 then price = price * (1 - ns.db.undercutPct / 100) end
+  price = floor(price) - (ns.db.undercut or 0)
+
+  -- don't race one lone dumper to the bottom: undercut the next one instead
+  local outlier, second = self:LoneOutlier()
+  if outlier and low <= outlier and second then
+    price = floor(second * (1 - (ns.db.undercutPct or 0) / 100)) - (ns.db.undercut or 0)
+    self.priceNote = format("|cffe6cc80One listing at %s sits far below the rest; priced under the next at %s instead.|r",
+      ns.Money(outlier), ns.Money(second))
+  else
+    self.priceNote = nil
   end
+  self:SetPrice(price)
+  return true
+end
+
+-- What this item cost you, so you can be warned about selling at a loss
+function S:CostBasis()
+  local item = self.item
+  if not item or not item.id then return nil end
+  local buy = ns.Ledger and ns.Ledger:Book().buys[item.id]
+  if buy and buy.qty > 0 then return buy.cost / buy.qty, "you paid" end
+  local recipe = ns.Crafting and ns.Crafting.MaterialCostFor and ns.Crafting:MaterialCostFor(item.id)
+  if recipe then return recipe, "materials cost" end
 end
 
 function S:SortEntries()
@@ -513,6 +547,16 @@ function S:UpdateSummary()
   if err and err ~= "" then self.warn:SetText("|cffff5555" .. err .. "|r")
   else self.warn:SetText(note or "") end
 
+  -- below what you paid for it? say so, but don't block the sale
+  if item and not err then
+    local basis, why = self:CostBasis()
+    local _, _, unit = self:ReadInputs()
+    if basis and unit and unit < basis then
+      self.priceNote = format("|cffff6655That is below %s (%s each).|r", why, ns.Money(basis))
+    end
+  end
+  if self.priceNote and self.postStatus then self.postStatus:SetText(self.priceNote) end
+
   ns.Enable(self.postBtn, not err)
   if item and not err then
     self.postBtn:SetText(stacks > 1 and format("Post %d x %d", stacks, stack) or "Post auction")
@@ -531,6 +575,9 @@ function S:Post()
   if buyStack > 0 and bidStack > buyStack then bidStack = buyStack end
   if bidStack <= 0 then return end
 
+  if ns.Ledger and self.item then
+    ns.Ledger:NotePosted(self.item.name, stack, unit)
+  end
   StartAuction(bidStack, buyStack, ns.db.duration, stack, stacks)
   self.postStatus:SetText(format("Posting %d x %d ...", stacks, stack))
 

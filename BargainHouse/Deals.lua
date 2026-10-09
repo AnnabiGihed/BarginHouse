@@ -225,6 +225,7 @@ function FS:Aggregate(record)
     g.auctions[#g.auctions + 1] = e
   end
   self.groups = groups
+  if record and ns.Ledger then pcall(ns.Ledger.AfterScan, ns.Ledger, groups) end
 
   ns.db.market = ns.db.market or {}
   local book = ns.db.market[Key()] or {}
@@ -334,8 +335,17 @@ function FS:Deals(opts)
                     days = days, listed = #g.auctions, dailyQty = dailyQty }
         -- Don't plan to flip more than the market swallows in a day. Without
         -- this a single cheap stack of something nobody buys looks like profit.
-        local cap = (kind == "resell" and dailyQty and dailyQty > 0)
-          and math.max(1, floor(dailyQty * LIQUIDITY_SHARE)) or nil
+        -- how many actually sell in a day, when we have watched long enough;
+        -- otherwise fall back to a share of what is listed
+        local perDay = ns.Ledger and ns.Ledger:SaleRate(id)
+        local cap
+        if kind == "resell" then
+          if perDay and perDay > 0 then
+            cap = math.max(1, floor(perDay))
+          elseif dailyQty and dailyQty > 0 then
+            cap = math.max(1, floor(dailyQty * LIQUIDITY_SHARE))
+          end
+        end
         for i, a in ipairs(offers) do
           if a.unit > limit then break end
           if opts.maxSpend and opts.maxSpend > 0 and d.cost + a.buyout > opts.maxSpend then break end

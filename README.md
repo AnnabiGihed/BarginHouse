@@ -9,7 +9,7 @@ replaces Blizzard's auction window with a faster one built around three question
 Everything works on a stock 3.3.5a client. No libraries, no dependencies.
 
 - **Game version:** 3.3.5a (WotLK) - it will **not** work on Classic, Cataclysm or retail clients
-- **Addon version:** 1.7.1 (see [CHANGELOG.md](CHANGELOG.md))
+- **Addon version:** 1.8.0 (see [CHANGELOG.md](CHANGELOG.md))
 - **Author:** Anguish
 - **License:** free to use in game; no modification, reuse or redistribution (see [LICENSE](LICENSE))
 
@@ -312,6 +312,8 @@ Both characters must be on the **same realm and faction**.
 | `/bh reset` | Reset window position and scale |
 | `/bh guild` | Show what is recorded from your guild bank |
 | `/bh autobuy` | Re-enable automatic buying after a server block |
+| `/bh profit` | What your deals actually made, against what was predicted |
+| `/bh check` | Verify the interface built correctly in this client |
 | `/bh diag` | Show why right-click selling isn't working |
 | `/bh clearprices` | Wipe recorded price history |
 
